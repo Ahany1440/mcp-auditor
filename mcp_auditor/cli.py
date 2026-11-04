@@ -14,8 +14,17 @@ from .source import open_target
 
 
 def build_parser() -> argparse.ArgumentParser:
-    p = argparse.ArgumentParser(prog="mcp-audit", description="Scan an MCP server for security problems in the tools it exposes.")
-    p.add_argument("target", nargs="?", help="local folder, single file, or https://github.com/owner/repo[/tree/branch/subdir]")
+    p = argparse.ArgumentParser(
+        prog="mcp-audit", description="Scan an MCP server for security problems in the tools it exposes.",
+        formatter_class=argparse.RawDescriptionHelpFormatter,
+        epilog="examples:\n"
+               "  mcp-audit                                  scan the current folder\n"
+               "  mcp-audit path/to/server                   scan a folder or a single file\n"
+               "  mcp-audit https://github.com/owner/repo    scan a GitHub repo\n"
+               "  mcp-audit --stdio \"python server.py\"       start a server and check its live tools\n"
+               "  mcp-audit . --format sarif -o out.sarif    report for GitHub code scanning")
+    p.add_argument("target", nargs="?", help="folder, single file, or https://github.com/owner/repo[/tree/branch/subdir] "
+                   "(default: the current folder)")
     p.add_argument("--stdio", metavar="CMD", help="also start this stdio server command and audit its live tools/list "
                    "(this runs the server's code)")
     p.add_argument("--format", choices=["text", "json", "sarif"], default="text")
@@ -30,7 +39,7 @@ def build_parser() -> argparse.ArgumentParser:
 def main(argv: list[str] | None = None) -> int:
     args = build_parser().parse_args(argv)
     if not args.target and not args.stdio:
-        build_parser().error("give a target path/URL, --stdio CMD, or both")
+        args.target = "."
     workdir = None
     try:
         if args.target:
@@ -39,6 +48,8 @@ def main(argv: list[str] | None = None) -> int:
                 import tempfile
                 workdir = tempfile.mkdtemp(prefix="mcp-audit-")
             target, root = open_target(args.target, workdir)
+            if args.target == ".":
+                target.label = str(Path.cwd())
         else:
             target, root, is_url = Target(args.stdio), None, False
         if args.stdio:

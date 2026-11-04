@@ -4,6 +4,7 @@ from __future__ import annotations
 import json
 import os
 import sys
+import textwrap
 from collections import Counter
 
 from . import __version__
@@ -36,9 +37,19 @@ def to_text(target: Target, findings: list[Finding], color: bool | None = None) 
         if f.evidence:
             out.append(f"         > {f.evidence}")
         out.append("")
+    if not target.tools:
+        out += ["Note: no MCP tools were found here. Is this the folder of an MCP server?", ""]
+    if not findings:
+        out.append("No findings. That doesn't prove the server is safe, only that none of the known patterns matched.")
+        return "\n".join(out)
+    seen = {f.rule.id for f in findings}
+    out.append("How to fix:")
+    for r in RULES:
+        if r.id in seen:
+            out.append(f"  {r.id} {r.name}")
+            out += textwrap.wrap(r.help, 96, initial_indent="    ", subsequent_indent="    ")
     counts = Counter(f.severity for f in findings)
-    out.append("No findings." if not findings else
-               "Summary: " + ", ".join(f"{counts[s]} {s}" for s in reversed(SEVERITIES)))
+    out += ["", "Summary: " + ", ".join(f"{counts[s]} {s}" for s in reversed(SEVERITIES))]
     return "\n".join(out)
 
 

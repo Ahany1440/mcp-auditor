@@ -87,7 +87,7 @@ def open_target(path_or_url: str, workdir: str | None = None) -> tuple[Target, P
     else:
         root = Path(path_or_url)
         if not root.exists():
-            raise FileNotFoundError(path_or_url)
+            raise FileNotFoundError(f"no such file or folder: {path_or_url}")
         if root.is_file():  # a single server file: scan just that
             return load_target_single(path_or_url, root), root.parent
     return load_target(path_or_url, root), root
