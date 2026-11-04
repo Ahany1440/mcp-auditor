@@ -54,7 +54,7 @@ when something serious (high or critical) is found, so you can use it in scripts
 | **Hard-coded secrets** | API keys, tokens or private keys written into the code. |
 | **Unsafe execution** | Text the AI sends gets run as code or as a shell command (`eval`, `shell=True`, `exec`). |
 | **Missing auth** | The server listens on the network, and anyone who can reach it can use its tools. |
-| **Rug pull** | The tool description is downloaded or built at runtime, so it can change after you approved it. |
+| **Rug pull** | The tool description is downloaded or built at runtime, so it can change after you approved it. With `--pin`, it also tells you when tools actually change. |
 
 It works by matching known patterns in the code, not by running the server. It catches common
 mistakes, but a clean result doesn't prove a server is safe. [DESIGN.md](DESIGN.md) explains how
@@ -76,6 +76,25 @@ mcp-audit path/to/server --stdio "python server.py"       # also check the tools
 mcp-audit --stdio "npx -y some-mcp-server"                # only the running server's tools
 ```
 
+### Catching tools that change after you approved them
+
+A scan only sees the server as it is today. A server can look clean while you check it and change
+its tools later (a "rug pull"). Two options help with that:
+
+```bash
+mcp-audit path/to/server --pin tools.lock.json   # first run: saves every tool's definition
+mcp-audit path/to/server --pin tools.lock.json   # later runs: reports added, changed or removed tools
+```
+
+A changed tool is reported as high, with the old and new text, so CI fails on it. Commit
+`tools.lock.json` next to your MCP config; when a change is expected, review it and delete the
+file to pin the new version. `--pin` works with `--stdio` too, which pins what the running server
+actually returns.
+
+In live mode the scanner also asks for `tools/list` 3 times (`--repeat N`) and flags any tool
+that changes between answers, which catches servers that show a clean list first and swap it
+after.
+
 Options:
 
 | Option | Meaning |
@@ -85,6 +104,8 @@ Options:
 | `--fail-on low\|medium\|high\|critical\|none` | Exit with code 1 if any finding is at or above this severity (default `high`). |
 | `--stdio CMD` | Start this stdio server, run `initialize` and `tools/list`, and audit the tools it returns. **This runs the server's code on your machine.** Only use it on servers you would run anyway. |
 | `--timeout SECONDS` | How long to wait for the `--stdio` server (default 30). |
+| `--pin FILE` | Save the tools to FILE on the first run; on later runs, report tools that were added, changed or removed. |
+| `--repeat N` | With `--stdio`, ask for `tools/list` N times and flag tools that change between answers (default 3). |
 
 Exit codes: `0` no findings at or above `--fail-on`, `1` there are, `2` the scan itself failed
 (bad path, clone failed, server did not answer).
@@ -169,7 +190,7 @@ One module per detector in [`mcp_auditor/detectors/`](mcp_auditor/detectors).
 | MCP003 | `hardcoded-secret` | AWS, GitHub, Anthropic, OpenAI, Slack, Google, Stripe, Hugging Face and npm tokens, private keys, JWTs (patterns adapted from gitleaks), plus `*_key/secret/token/password = "..."` assignments with high entropy that aren't placeholders. Values are masked in every output. |
 | MCP004 | `unsafe-execution` | `eval`/`exec`, `os.system`, `subprocess(..., shell=True)`, `child_process.exec` with a built string, `spawn(..., {shell: true})`, `new Function`, `vm.run*`, Go `exec.Command("sh", "-c", ...)`. In Python, critical when a tool parameter reaches the call. |
 | MCP005 | `missing-auth` | Servers that start an SSE or streamable-HTTP transport when nothing in the codebase checks an incoming credential. Critical when it also binds to `0.0.0.0`; medium when there is at least an `Origin` check. |
-| MCP006 | `rug-pull-risk` | Tool descriptions that are not literals in the code: downloaded at runtime, read from environment variables, or built from variables. Also servers that send `tools/list_changed`, since they can swap tools after you approved them. |
+| MCP006 | `rug-pull-risk` | Tool descriptions that are not literals in the code: downloaded at runtime, read from environment variables, or built from variables. Also servers that send `tools/list_changed`, since they can swap tools after you approved them. With `--pin` or `--stdio`, also reports tools that actually changed: since the pin, or between repeated `tools/list` calls. |
 
 Severities: `critical` means tool input clearly reaches something dangerous; `high` is a strong
 signal worth fixing; `medium` needs a look; `low` is informational.
@@ -192,13 +213,13 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
-      - uses: Ahany1440/mcp-auditor@v0.1.0
+      - uses: Ahany1440/mcp-auditor@v0.2.0
         with:
           path: .            # folder to scan
           fail-on: high      # fail the job on high or critical findings
 ```
 
-Inputs: `path` (default `.`), `fail-on` (default `high`), `upload-sarif` (default `true`),
+Inputs: `path` (default `.`), `fail-on` (default `high`), `pin` (a committed lock file to compare against, optional), `upload-sarif` (default `true`),
 `sarif-file` (default `mcp-audit.sarif`). The action needs `python3` on the runner (present on
 GitHub-hosted Ubuntu and macOS runners).
 

@@ -6,6 +6,10 @@ RULES = [d.RULE for d in DETECTORS]
 
 
 def run_all(target):
+    return sort_findings([f for d in DETECTORS for f in d.detect(target)])
+
+
+def sort_findings(findings):
+    """Worst first, then by rule and location."""
     from ..models import severity_rank
-    findings = [f for d in DETECTORS for f in d.detect(target)]
     return sorted(findings, key=lambda f: (-severity_rank(f.severity), f.rule.id, f.file or "", f.line or 0))

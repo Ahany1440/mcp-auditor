@@ -12,6 +12,9 @@ inputs:
   fail-on:
     description: Fail the step if a finding is at or above this severity (low, medium, high, critical, none).
     default: high
+  pin:
+    description: Optional lock file (committed in the repo) created with `mcp-audit --pin`. The step fails if tools changed since.
+    default: ""
   upload-sarif:
     description: Upload the SARIF report to GitHub code scanning (needs security-events write permission).
     default: "true"
@@ -34,11 +37,17 @@ runs:
         SCAN_PATH: ${{ inputs.path }}
         FAIL_ON: ${{ inputs.fail-on }}
         SARIF_FILE: ${{ inputs.sarif-file }}
+        PIN: ${{ inputs.pin }}
         PYTHONPATH: ${{ github.action_path }}
       run: |
         set +e
-        python3 -m mcp_auditor "$SCAN_PATH" --fail-on "$FAIL_ON"
-        python3 -m mcp_auditor "$SCAN_PATH" --format sarif --output "$SARIF_FILE" --fail-on "$FAIL_ON"
+        pin_args=()
+        if [ -n "$PIN" ]; then
+          [ -f "$PIN" ] || { echo "pin file $PIN not found; create it locally with mcp-audit --pin and commit it"; exit 2; }
+          pin_args=(--pin "$PIN")
+        fi
+        python3 -m mcp_auditor "$SCAN_PATH" --fail-on "$FAIL_ON" "${pin_args[@]}"
+        python3 -m mcp_auditor "$SCAN_PATH" --format sarif --output "$SARIF_FILE" --fail-on "$FAIL_ON" "${pin_args[@]}"
         echo "exit-code=$?" >> "$GITHUB_OUTPUT"
 
     - if: inputs.upload-sarif == 'true' && steps.scan.outputs.exit-code != '2'

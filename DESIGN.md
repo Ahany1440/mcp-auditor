@@ -80,6 +80,20 @@ The Python taint tracking is deliberately small: a function's parameters, plus l
 assigned from them (two rounds), plus `with ... as x` targets. It does not follow values into
 other functions.
 
+## Pinning and repeated calls (pin.py)
+
+The static rug-pull check says a description *can* change. `pin.py` notices when it *does*:
+
+- `--pin FILE` stores each tool's definition (the raw `tools/list` entry in live mode; name,
+  description, parameters and schema text in static mode; never file or line, so moving code is not
+  a change). Later runs compare and report added (medium), changed (high, with before/after text)
+  and removed (low) tools.
+- `--repeat N` (live mode, default 3) asks for `tools/list` N times in one session and compares the
+  answers the same way. Changed versions are also run through the detectors, so a poisoned
+  description that only appears on the second call is still checked.
+
+Both report under MCP006 so the detector count stays at six.
+
 ## Severity
 
 - **critical**: tool input demonstrably reaches something dangerous (a tool parameter flows into
@@ -115,9 +129,13 @@ program analysis.
 - **missing_auth is repo-wide.** Any inbound-auth pattern anywhere disables the check, even if it
   protects a different endpoint. Default binds are not checked: Node's `app.listen(port)` listens
   on all interfaces, but only an explicit `0.0.0.0` raises the severity.
-- **Rug pulls over time are not tracked.** The tool flags descriptions that *can* change; it
-  doesn't store a pinned copy of `tools/list` to compare against later. Pinning plus diffing would
-  be the next feature.
+- **Rug pulls are only caught where they can be observed.** `--pin` catches a change between two
+  scans, and `--repeat` catches a change between `tools/list` calls in one session. A server that
+  flips only after N `tools/call` requests, or only for certain clients, will still look clean,
+  because the scanner never calls tools (that would run their side effects). The static check
+  helps here: a description fetched from the network is flagged even if the server sends benign
+  text to the scanner, because the finding is about the fetch, not the text. Obfuscated fetch
+  code can still get past it.
 - **Tool output is not checked.** A server can return instructions in a tool's *result* at
   runtime ("now call delete_files"), and no pre-install scan sees that. Catching it needs something
   that sits between the client and the server and inspects responses, which is a different tool.

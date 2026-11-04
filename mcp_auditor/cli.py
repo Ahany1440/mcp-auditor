@@ -7,8 +7,8 @@ import shutil
 import sys
 from pathlib import Path
 
-from . import __version__, live, report
-from .detectors import run_all
+from . import __version__, live, pin, report
+from .detectors import run_all, sort_findings
 from .models import SEVERITIES, Target, severity_rank
 from .source import open_target
 
@@ -22,6 +22,7 @@ def build_parser() -> argparse.ArgumentParser:
                "  mcp-audit path/to/server                   scan a folder or a single file\n"
                "  mcp-audit https://github.com/owner/repo    scan a GitHub repo\n"
                "  mcp-audit --stdio \"python server.py\"       start a server and check its live tools\n"
+               "  mcp-audit . --pin tools.lock.json          save the tools once, then alert when they change\n"
                "  mcp-audit . --format sarif -o out.sarif    report for GitHub code scanning")
     p.add_argument("target", nargs="?", help="folder, single file, or https://github.com/owner/repo[/tree/branch/subdir] "
                    "(default: the current folder)")
@@ -32,6 +33,10 @@ def build_parser() -> argparse.ArgumentParser:
     p.add_argument("--fail-on", choices=SEVERITIES + ["none"], default="high",
                    help="exit with code 1 if any finding is at or above this severity (default: high)")
     p.add_argument("--timeout", type=float, default=30.0, help="seconds to wait for the --stdio server (default: 30)")
+    p.add_argument("--repeat", type=int, default=3, metavar="N",
+                   help="with --stdio, ask for tools/list N times and flag tools that change between answers (default: 3)")
+    p.add_argument("--pin", metavar="FILE", help="first run: save every tool's definition to FILE. Later runs: report "
+                   "tools that were added, changed or removed since. Delete FILE to accept the current tools.")
     p.add_argument("--version", action="version", version=f"mcp-audit {__version__}")
     return p
 
@@ -52,9 +57,24 @@ def main(argv: list[str] | None = None) -> int:
                 target.label = str(Path.cwd())
         else:
             target, root, is_url = Target(args.stdio), None, False
+        extra = []
         if args.stdio:
-            target.tools += live.list_tools(args.stdio, args.timeout)
-        findings = run_all(target)
+            snapshots = live.list_tools(args.stdio, args.timeout, args.repeat)
+            target.tools += snapshots[0]
+            for n, later in enumerate(snapshots[1:], 2):
+                extra = pin.compare(pin.snapshot(snapshots[0]), later, f"between tools/list call 1 and call {n}")
+                if extra:  # report the first flip only, not the same change once per call
+                    # also run the detectors on the changed versions, so the new text gets checked too
+                    first = pin.snapshot(snapshots[0])
+                    target.tools += [t for k, t in zip(pin.snapshot(later), later) if first.get(k) != pin.definition(t)]
+                    break
+        if args.pin and Path(args.pin).exists():
+            extra += pin.compare(pin.load(args.pin), target.tools, f"since it was pinned in {args.pin}")
+        elif args.pin:
+            pin.save(args.pin, target.tools)
+            print(f"mcp-audit: pinned {len(target.tools)} tools to {args.pin}. Future runs with --pin "
+                  f"{args.pin} will report any change.", file=sys.stderr)
+        findings = sort_findings(run_all(target) + extra)
     except Exception as e:  # report any loader/live failure as a usage error, not a traceback
         print(f"mcp-audit: error: {e}", file=sys.stderr)
         return 2

@@ -43,6 +43,7 @@ class Tool:
     end_line: int | None = None  # last line of the handler, when the handler is known
     source: str = "static"       # "static" or "live"
     extra: list[tuple[str, str]] = field(default_factory=list)  # (where, text): parameter names, titles, enums, defaults...
+    raw: dict | None = None      # the full definition as returned by tools/list (live tools only)
 
 
 def schema_texts(schema, where: str = "input schema") -> list[tuple[str, str]]:

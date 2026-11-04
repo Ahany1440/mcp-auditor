@@ -4,7 +4,7 @@ build-backend = "setuptools.build_meta"
 
 [project]
 name = "mcp-auditor"
-version = "0.1.0"
+version = "0.2.0"
 description = "Security scanner for MCP servers: tool poisoning, over-broad tools, secrets, unsafe exec, missing auth, rug-pull risk."
 readme = "README.md"
 license = "MIT"

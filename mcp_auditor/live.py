@@ -19,7 +19,11 @@ from .models import Tool, schema_texts
 PROTOCOL_VERSION = "2025-06-18"
 
 
-def list_tools(command: str, timeout: float = 30.0) -> list[Tool]:
+def list_tools(command: str, timeout: float = 30.0, times: int = 1) -> list[list[Tool]]:
+    """Ask the server for tools/list `times` times in one session; return one snapshot per call.
+
+    Asking more than once catches servers that show a clean list first and change it later.
+    """
     args = shlex.split(command, posix=os.name != "nt")
     if os.name == "nt":
         args = [a.strip('"') for a in args]
@@ -57,14 +61,18 @@ def list_tools(command: str, timeout: float = 30.0) -> list[Tool]:
             "clientInfo": {"name": "mcp-audit", "version": __version__}}})
         reply(1)
         send({"method": "notifications/initialized"})
-        tools, cursor, msg_id = [], None, 2
-        while True:
-            send({"id": msg_id, "method": "tools/list", "params": {"cursor": cursor} if cursor else {}})
-            result = reply(msg_id)
-            tools += [_to_tool(t) for t in result.get("tools", [])]
-            cursor, msg_id = result.get("nextCursor"), msg_id + 1
-            if not cursor:
-                return tools
+        snapshots, msg_id = [], 2
+        for _ in range(max(times, 1)):
+            tools, cursor = [], None
+            while True:
+                send({"id": msg_id, "method": "tools/list", "params": {"cursor": cursor} if cursor else {}})
+                result = reply(msg_id)
+                tools += [_to_tool(t) for t in result.get("tools", [])]
+                cursor, msg_id = result.get("nextCursor"), msg_id + 1
+                if not cursor:
+                    break
+            snapshots.append(tools)
+        return snapshots
     finally:
         proc.kill()
         proc.wait()
@@ -82,4 +90,4 @@ def _to_tool(raw: dict) -> Tool:
         if isinstance(value, str):
             extra.append((where, value))
     return Tool(name=str(raw.get("name", "")), description=str(raw.get("description") or ""),
-                params=params, source="live", extra=extra)
+                params=params, source="live", extra=extra, raw=raw)
