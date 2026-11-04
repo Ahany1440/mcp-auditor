@@ -1,0 +1,72 @@
+"""MCP003: hard-coded secrets in server code or config.
+
+Provider patterns are adapted from the gitleaks default rule set (MIT). A generic
+`key = "value"` rule catches the rest, filtered by placeholder words and entropy.
+Matched values are masked before they reach any report.
+"""
+from __future__ import annotations
+
+import math
+import re
+from collections import Counter
+
+from ..models import Finding, Rule, Target
+
+RULE = Rule("MCP003", "hardcoded-secret", "Hard-coded secret in server code or config",
+            "Move the value to an environment variable or a secret manager, and rotate it: anything that was "
+            "committed should be treated as leaked.")
+
+PROVIDERS = [
+    ("AWS access key ID", r"\b(?:AKIA|ASIA|ABIA|ACCA)[0-9A-Z]{16}\b"),
+    ("GitHub token", r"\bgh[pousr]_[A-Za-z0-9]{36,}\b"),
+    ("GitHub fine-grained token", r"\bgithub_pat_[A-Za-z0-9_]{60,}\b"),
+    ("Anthropic API key", r"\bsk-ant-(?:api|admin)\d{2}-[A-Za-z0-9_-]{80,}"),
+    ("OpenAI API key", r"\bsk-(?:proj-|svcacct-|admin-)?[A-Za-z0-9_-]{20,}T3BlbkFJ[A-Za-z0-9_-]{20,}"),
+    ("Slack token", r"\bxox[abposr]-[0-9A-Za-z-]{10,}"),
+    ("Slack webhook", r"https://hooks\.slack\.com/services/[A-Za-z0-9/_+-]{40,}"),
+    ("Google API key", r"\bAIza[0-9A-Za-z_-]{35}\b"),
+    ("Stripe secret key", r"\b(?:sk|rk)_live_[0-9A-Za-z]{20,}\b"),
+    ("Private key", r"-----BEGIN (?:RSA |EC |DSA |OPENSSH |PGP |ENCRYPTED )?PRIVATE KEY(?: BLOCK)?-----"),
+    ("JSON Web Token", r"\beyJ[A-Za-z0-9_-]{10,}\.eyJ[A-Za-z0-9_-]{10,}\.[A-Za-z0-9_-]{10,}"),
+    ("Hugging Face token", r"\bhf_[A-Za-z]{34}\b"),
+    ("npm token", r"\bnpm_[A-Za-z0-9]{36}\b"),
+]
+PROVIDERS = [(name, re.compile(rx)) for name, rx in PROVIDERS]
+
+GENERIC = re.compile(
+    r"""(?i)\b([\w-]*(?:api[_-]?key|secret|token|passw(?:or)?d|access[_-]?key|auth[_-]?key)[\w-]*)["']?\s*[:=]\s*["']([^"'\s]{16,})["']""")
+PLACEHOLDER = re.compile(r"(?i)your|example|xxx|changeme|placeholder|dummy|sample|redacted|<|>|\$\{|\{\{|process\.env|environ|getenv|\*\*\*")
+
+
+def entropy(s: str) -> float:
+    return -sum(c / len(s) * math.log2(c / len(s)) for c in Counter(s).values())
+
+
+def mask(value: str) -> str:
+    return value[:4] + "*" * min(len(value) - 4, 12) + f" ({len(value)} chars)"
+
+
+def detect(target: Target) -> list[Finding]:
+    findings = []
+    for f in target.files:
+        for n, line in enumerate(f.text.splitlines(), 1):
+            if len(line) > 2000:  # minified or generated
+                continue
+            hit = False
+            for name, rx in PROVIDERS:
+                m = rx.search(line)
+                if m:
+                    findings.append(Finding(RULE, "high" if name != "JSON Web Token" else "medium",
+                                            f"{name} committed in source.", f.path, n, evidence=mask(m.group(0))))
+                    hit = True
+                    break
+            if hit:
+                continue
+            m = GENERIC.search(line)
+            value = m.group(2) if m else ""
+            # a list of secret *names* ("GITHUB_TOKEN,NPM_TOKEN", "api_key|password") is not a secret
+            names_only = re.fullmatch(r"[A-Z0-9_,|. -]+", value) or re.fullmatch(r"(?i)\w+(\s*[,|]\s*\w+)+", value)
+            if m and not PLACEHOLDER.search(value) and not names_only and entropy(value) >= 3.5:
+                findings.append(Finding(RULE, "medium", f"Possible secret assigned to '{m.group(1)}'.", f.path, n,
+                                        evidence=mask(m.group(2))))
+    return findings

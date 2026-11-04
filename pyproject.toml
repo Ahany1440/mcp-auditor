@@ -1,0 +1,23 @@
+[build-system]
+requires = ["setuptools>=61"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "mcp-auditor"
+version = "0.1.0"
+description = "Security scanner for MCP servers: tool poisoning, over-broad tools, secrets, unsafe exec, missing auth, rug-pull risk."
+readme = "README.md"
+license = { text = "MIT" }
+authors = [{ name = "Nex" }]
+requires-python = ">=3.10"
+dependencies = []
+classifiers = ["Programming Language :: Python :: 3", "Topic :: Security", "License :: OSI Approved :: MIT License"]
+
+[project.urls]
+Homepage = "https://github.com/Ahany1440/mcp-auditor"
+
+[project.scripts]
+mcp-audit = "mcp_auditor.cli:main"
+
+[tool.setuptools.packages.find]
+include = ["mcp_auditor*"]

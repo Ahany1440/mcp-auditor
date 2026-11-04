@@ -1,0 +1,56 @@
+name: MCP Server Auditor
+description: Scan an MCP server for tool poisoning, unsafe execution, secrets and other risks, and upload SARIF to code scanning.
+author: Nex
+branding:
+  icon: shield
+  color: red
+
+inputs:
+  path:
+    description: Folder (relative to the repository root) to scan.
+    default: "."
+  fail-on:
+    description: Fail the step if a finding is at or above this severity (low, medium, high, critical, none).
+    default: high
+  upload-sarif:
+    description: Upload the SARIF report to GitHub code scanning (needs security-events write permission).
+    default: "true"
+  sarif-file:
+    description: Where to write the SARIF report.
+    default: mcp-audit.sarif
+
+outputs:
+  exit-code:
+    description: 0 = nothing at or above fail-on, 1 = findings at or above fail-on, 2 = scan error.
+    value: ${{ steps.scan.outputs.exit-code }}
+
+runs:
+  using: composite
+  steps:
+    - id: scan
+      shell: bash
+      # inputs go through env vars, never straight into the script, so they can't inject shell code
+      env:
+        SCAN_PATH: ${{ inputs.path }}
+        FAIL_ON: ${{ inputs.fail-on }}
+        SARIF_FILE: ${{ inputs.sarif-file }}
+        PYTHONPATH: ${{ github.action_path }}
+      run: |
+        set +e
+        python3 -m mcp_auditor "$SCAN_PATH" --fail-on "$FAIL_ON"
+        python3 -m mcp_auditor "$SCAN_PATH" --format sarif --output "$SARIF_FILE" --fail-on "$FAIL_ON"
+        echo "exit-code=$?" >> "$GITHUB_OUTPUT"
+
+    - if: inputs.upload-sarif == 'true' && steps.scan.outputs.exit-code != '2'
+      uses: github/codeql-action/upload-sarif@v3
+      with:
+        sarif_file: ${{ inputs.sarif-file }}
+        category: mcp-audit
+
+    - if: steps.scan.outputs.exit-code != '0'
+      shell: bash
+      env:
+        CODE: ${{ steps.scan.outputs.exit-code }}
+      run: |
+        echo "mcp-audit found issues at or above the fail-on severity (exit code $CODE)."
+        exit "$CODE"
