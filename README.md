@@ -24,6 +24,8 @@ API keys) and send it to the server without telling you.
 `mcp-audit` reads an MCP server's code before you install it and points out problems like this,
 with the file, the line and how to fix it.
 
+![mcp-audit output on the vulnerable demo server](docs/demo.png)
+
 ## Quick start
 
 You need Python 3.10 or newer. Nothing else gets installed.
