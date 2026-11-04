@@ -49,7 +49,7 @@ when something serious (high or critical) is found, so you can use it in scripts
 
 | Problem | In plain words |
 |---|---|
-| **Tool poisoning** | The tool description contains hidden orders for the AI: "ignore your instructions", "don't tell the user", "read ~/.ssh", invisible characters, encoded text. |
+| **Tool poisoning** | The tool description, its parameter names or its input schema contain hidden orders for the AI: "ignore your instructions", "don't tell the user", "read ~/.ssh", invisible characters, encoded text. |
 | **Over-broad tools** | The tool can run any command, read or write any file, or open any URL, with no list of what's allowed. |
 | **Hard-coded secrets** | API keys, tokens or private keys written into the code. |
 | **Unsafe execution** | Text the AI sends gets run as code or as a shell command (`eval`, `shell=True`, `exec`). |
@@ -164,7 +164,7 @@ One module per detector in [`mcp_auditor/detectors/`](mcp_auditor/detectors).
 
 | ID | Name | What it looks for |
 |---|---|---|
-| MCP001 | `tool-poisoning` | In tool names, descriptions and parameter descriptions: "ignore previous instructions", "don't tell the user", fake `<IMPORTANT>`/`<system>` tags, references to credential files (`~/.ssh`, `mcp.json`, ...), requests to pass secrets along, attempts to redirect other tools, instructions to call another tool, invisible Unicode (zero-width, bidi, and Unicode tag characters, which it decodes), base64 blobs, and very long descriptions. Also flags bidi control characters anywhere in the source ("Trojan Source"). |
+| MCP001 | `tool-poisoning` | In everything the model reads about a tool: its name, description, parameter names, and every string in its input schema (descriptions, titles, enum values, defaults, nested objects). It looks for "ignore previous instructions", "don't tell the user", fake `<IMPORTANT>`/`<system>` tags, references to credential files (`~/.ssh`, `mcp.json`, ...), requests to pass secrets along, attempts to redirect other tools, instructions to call another tool, invisible Unicode (zero-width, bidi, and Unicode tag characters, which it decodes), base64 blobs, and very long descriptions. Also flags bidi control characters anywhere in the source ("Trojan Source"). |
 | MCP002 | `over-broad-capability` | Tools that pass their input to a shell/process call, a file read/write, or an HTTP request when the handler has no allow-list, path containment check (`is_relative_to`, `realpath`, `startsWith`, ...) or host check. Tools whose handler is not visible (live `tools/list`, low-level SDK servers) are judged from their description, at a lower severity. |
 | MCP003 | `hardcoded-secret` | AWS, GitHub, Anthropic, OpenAI, Slack, Google, Stripe, Hugging Face and npm tokens, private keys, JWTs (patterns adapted from gitleaks), plus `*_key/secret/token/password = "..."` assignments with high entropy that aren't placeholders. Values are masked in every output. |
 | MCP004 | `unsafe-execution` | `eval`/`exec`, `os.system`, `subprocess(..., shell=True)`, `child_process.exec` with a built string, `spawn(..., {shell: true})`, `new Function`, `vm.run*`, Go `exec.Command("sh", "-c", ...)`. In Python, critical when a tool parameter reaches the call. |

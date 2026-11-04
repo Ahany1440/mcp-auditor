@@ -13,7 +13,7 @@ import subprocess
 import tempfile
 from pathlib import Path
 
-from .models import SourceFile, Target, Tool
+from .models import SourceFile, Target, Tool, schema_texts
 
 SCAN_SUFFIXES = {".py", ".js", ".mjs", ".cjs", ".ts", ".mts", ".cts", ".tsx", ".jsx", ".go",
                  ".json", ".yaml", ".yml", ".toml", ".env", ".ini", ".cfg"}
@@ -132,6 +132,17 @@ def imports_mcp(f: SourceFile) -> bool:
     return bool(re.search(r"^\s*(from\s+mcp[\s.]|import\s+mcp\b)", f.text, re.M))
 
 
+def _field_strings(node: ast.AST | None) -> list[tuple[str, str]]:
+    """title=, default= and examples= strings inside a parameter annotation such as Field(...)."""
+    out = []
+    for n in ast.walk(node) if node is not None else []:
+        if isinstance(n, ast.keyword) and n.arg in ("title", "default", "examples"):
+            for c in ast.walk(n.value):
+                if isinstance(c, ast.Constant) and isinstance(c.value, str):
+                    out.append((n.arg, c.value))
+    return out
+
+
 def python_tools(f: SourceFile) -> list[Tool]:
     try:
         tree = ast.parse(f.text)
@@ -144,16 +155,25 @@ def python_tools(f: SourceFile) -> list[Tool]:
             dec = next((d for d in node.decorator_list if _is_tool_decorator(d)), None)
             if dec is None:
                 continue
-            params = {}
-            for a in node.args.args + node.args.kwonlyargs:
+            params, extra = {}, []
+            args = node.args.args + node.args.kwonlyargs
+            # positional defaults line up with the last positional args; kw-only defaults are listed per arg
+            defaults = dict(zip([a.arg for a in node.args.args][::-1], node.args.defaults[::-1]))
+            defaults.update({a.arg: d for a, d in zip(node.args.kwonlyargs, node.args.kw_defaults) if d is not None})
+            for a in args:
                 if a.arg in ("self", "ctx", "context"):
                     continue
                 descs = _descriptions_in(a.annotation) if a.annotation else []
                 params[a.arg] = " ".join(descs)
+                extra.append(("parameter name", a.arg))
+                extra += [(f"parameter '{a.arg}' {k}", v) for k, v in _field_strings(a.annotation)]
+                d = defaults.get(a.arg)
+                if isinstance(d, ast.Constant) and isinstance(d.value, str):
+                    extra.append((f"parameter '{a.arg}' default", d.value))
             tools.append(Tool(
                 name=_const_kwarg(dec, "name") or node.name,
                 description=_const_kwarg(dec, "description") or ast.get_docstring(node, clean=False) or "",
-                params=params, file=f.path, line=node.lineno, end_line=node.end_lineno))
+                params=params, file=f.path, line=node.lineno, end_line=node.end_lineno, extra=extra))
         elif sdk and isinstance(node, ast.Call) and getattr(node.func, "id", getattr(node.func, "attr", None)) == "Tool":
             name_expr = next((kw.value for kw in node.keywords if kw.arg == "name"), None)
             if name_expr is None:
@@ -161,7 +181,11 @@ def python_tools(f: SourceFile) -> list[Tool]:
             name = _const_kwarg(node, "name") or ast.unparse(name_expr)  # e.g. "self.name" when set at runtime
             schema = next((kw.value for kw in node.keywords if kw.arg in ("inputSchema", "input_schema")), None)
             params = {f"param{i}": d for i, d in enumerate(_descriptions_in(schema))} if schema else {}
-            tools.append(Tool(name, _const_kwarg(node, "description") or "", params, f.path, node.lineno))
+            try:  # a literal schema can be walked in full; one built from variables only partly
+                extra = schema_texts(ast.literal_eval(schema)) if schema else []
+            except ValueError:
+                extra = []
+            tools.append(Tool(name, _const_kwarg(node, "description") or "", params, f.path, node.lineno, extra=extra))
     return tools
 
 
@@ -173,6 +197,7 @@ JS_TOOL_OBJ = re.compile(r"\bname\s*:\s*" + _STR + r"\s*,\s*(?:title\s*:\s*" + _
 JS_DESC = re.compile(r"(?:\bdescription\s*:\s*|\.describe\(\s*)" + _STR, re.S)
 # mark3labs/mcp-go: mcp.NewTool("name", mcp.WithDescription("..."))
 # official go-sdk:  mcp.Tool{Name: "name", Description: "..."}  (or Description: t("KEY", "default text"))
+JS_PARAM_NAME = re.compile(r"\b([A-Za-z_$][\w$]*)\s*:\s*z\.")  # zod: { city: z.string() }
 GO_TOOL = re.compile(r"\bNewTool\(\s*\"((?:\\.|[^\"\\])*)\"|\bmcp\.Tool\{\s*Name:\s*\"((?:\\.|[^\"\\])*)\"")
 GO_DESC = re.compile(r"\b(?:(?:WithDescription|Description)\(\s*|Description:\s*(?:\w+\(\s*\"[^\"]*\"\s*,\s*)?)\"((?:\\.|[^\"\\])*)\"")
 WINDOW_LINES = 80  # shortcut: a JS/Go tool's handler is assumed to sit within the next 80 lines or before the next tool
@@ -199,7 +224,9 @@ def _windowed(f: SourceFile, hits: list[tuple[int, str]], desc_re: re.Pattern, f
         end = min(end, sum(len(l) for l in f.text.splitlines(True)[: line - 1 + WINDOW_LINES]))
         descs = [_first(m.groups()) for m in desc_re.finditer(f.text, start, max(end, start))]
         desc = descs.pop(0) if descs and first_desc_is_tool else ""
-        tools.append(Tool(name, desc, {f"param{j}": d for j, d in enumerate(descs)}, f.path, line, f.line_of(max(end - 1, start))))
+        names = [("parameter name", n) for n in JS_PARAM_NAME.findall(f.text, start, max(end, start))] if desc_re is JS_DESC else []
+        tools.append(Tool(name, desc, {f"param{j}": d for j, d in enumerate(descs)}, f.path, line,
+                          f.line_of(max(end - 1, start)), extra=names))
     return tools
 
 

@@ -14,7 +14,7 @@ import threading
 import time
 
 from . import __version__
-from .models import Tool
+from .models import Tool, schema_texts
 
 PROTOCOL_VERSION = "2025-06-18"
 
@@ -74,7 +74,12 @@ def list_tools(command: str, timeout: float = 30.0) -> list[Tool]:
 
 
 def _to_tool(raw: dict) -> Tool:
-    props = (raw.get("inputSchema") or {}).get("properties") or {}
+    schema = raw.get("inputSchema") or {}
+    props = schema.get("properties") or {}
     params = {k: str(v.get("description", "")) for k, v in props.items() if isinstance(v, dict)}
+    extra = schema_texts(schema) + schema_texts(raw.get("outputSchema"), "output schema")
+    for where, value in (("title", raw.get("title")), ("annotations title", (raw.get("annotations") or {}).get("title"))):
+        if isinstance(value, str):
+            extra.append((where, value))
     return Tool(name=str(raw.get("name", "")), description=str(raw.get("description") or ""),
-                params=params, source="live")
+                params=params, source="live", extra=extra)

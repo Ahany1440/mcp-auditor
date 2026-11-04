@@ -43,6 +43,11 @@ BASE64 = re.compile(r"[A-Za-z0-9+/]{60,}={0,2}")
 LONG_DESCRIPTION = 1500
 
 
+def humanize(name: str) -> str:
+    """ignore_previousInstructions -> "ignore previous Instructions", so phrase patterns match identifiers too."""
+    return re.sub(r"[_\-.]+", " ", re.sub(r"(?<=[a-z0-9])(?=[A-Z])", " ", name))
+
+
 def check_text(text: str) -> list[tuple[str, str, str]]:
     """Return (severity, reason, evidence) for one metadata string. Used for tools and by tests."""
     out = []
@@ -76,7 +81,14 @@ def detect(target: Target) -> list[Finding]:
         fields = [("name", tool.name), ("description", tool.description)]
         fields += [(f"parameter '{p}' description" if not p.startswith("param") else "a parameter description", d)
                    for p, d in tool.params.items()]
+        fields += tool.extra  # parameter names, titles, enum values, defaults, nested schema text
+        seen = set()
         for field, text in fields:
+            if not text or text in seen:
+                continue  # the same string can be reached twice (e.g. a description via params and via the schema)
+            seen.add(text)
+            if field in ("name", "parameter name"):
+                text = humanize(text)
             for sev, why, evidence in check_text(text):
                 findings.append(Finding(RULE, sev, f"Tool '{tool.name}' {field} {why}.", tool.file, tool.line,
                                         tool.name, evidence.strip()[:200]))

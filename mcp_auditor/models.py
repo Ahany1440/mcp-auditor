@@ -42,6 +42,35 @@ class Tool:
     line: int | None = None
     end_line: int | None = None  # last line of the handler, when the handler is known
     source: str = "static"       # "static" or "live"
+    extra: list[tuple[str, str]] = field(default_factory=list)  # (where, text): parameter names, titles, enums, defaults...
+
+
+def schema_texts(schema, where: str = "input schema") -> list[tuple[str, str]]:
+    """Every string in a JSON schema that ends up in the model's context, labelled with where it sits."""
+    out: list[tuple[str, str]] = []
+    if not isinstance(schema, dict):
+        return out
+    for key in ("title", "description", "default"):
+        if isinstance(schema.get(key), str):
+            out.append((f"{where} {key}", schema[key]))
+    for key in ("enum", "examples"):
+        for v in schema.get(key) or []:
+            if isinstance(v, str):
+                out.append((f"{where} {key} value", v))
+    props = schema.get("properties")
+    for name, sub in (props.items() if isinstance(props, dict) else []):
+        out.append(("parameter name", str(name)))
+        out += schema_texts(sub, f"parameter '{name}'")
+    for key in ("items", "additionalProperties"):
+        out += schema_texts(schema.get(key), f"{where} items")
+    for key in ("anyOf", "oneOf", "allOf"):
+        for sub in schema.get(key) or []:
+            out += schema_texts(sub, where)
+    for key in ("$defs", "definitions"):
+        defs = schema.get(key)
+        for name, sub in (defs.items() if isinstance(defs, dict) else []):
+            out += schema_texts(sub, f"schema definition '{name}'")
+    return out
 
 
 @dataclass

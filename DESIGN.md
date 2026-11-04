@@ -54,6 +54,13 @@ types; `detectors/_python.py` holds the AST helpers that three detectors share.
   tools have no source location, so code-based checks can't apply to them; the description-based
   ones do.
 
+Tool poisoning doesn't stop at the description. The model reads the whole tool definition, so
+every string in it is checked: parameter names (split from `snake_case`/`camelCase` into words so
+the phrase patterns still match), and every title, description, enum value, default and example in
+the input schema, including nested objects and `$defs`. In Python this also covers string
+defaults in the function signature and `Field(title=..., examples=...)`. In JS/TS it covers zod
+parameter names. Live mode walks the full `inputSchema` and `outputSchema`.
+
 For JS/TS/Go there is no AST, so a tool's "handler" is assumed to be the text from its
 declaration to the next tool declaration, capped at 80 lines. That is a shortcut, marked in the
 code.
@@ -111,6 +118,13 @@ program analysis.
 - **Rug pulls over time are not tracked.** The tool flags descriptions that *can* change; it
   doesn't store a pinned copy of `tools/list` to compare against later. Pinning plus diffing would
   be the next feature.
+- **Tool output is not checked.** A server can return instructions in a tool's *result* at
+  runtime ("now call delete_files"), and no pre-install scan sees that. Catching it needs something
+  that sits between the client and the server and inspects responses, which is a different tool.
+  `--stdio` only calls `tools/list`. It never calls tools, because that would mean running their
+  side effects.
+- **JS/TS schemas are partly read.** Zod parameter names and `description`/`.describe()` strings
+  are checked; zod `.enum([...])` values and defaults are not.
 - **Tool poisoning is pattern-based.** Paraphrased or non-English instructions will get through.
   There is no model in the loop on purpose: results are deterministic and the scanner can't be
   prompt-injected by the server it is scanning.
