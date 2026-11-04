@@ -69,7 +69,10 @@ def main(argv: list[str] | None = None) -> int:
     else:
         prefix = ""
         if root is not None and not is_url:
-            rel = os.path.relpath(Path(root).resolve(), Path.cwd())
+            try:
+                rel = os.path.relpath(Path(root).resolve(), Path.cwd())
+            except ValueError:  # different drive on Windows
+                rel = ".."
             prefix = "" if rel == "." or rel.startswith("..") else Path(rel).as_posix()
         out = report.to_sarif(target, findings, prefix)
 
