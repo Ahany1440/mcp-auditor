@@ -24,15 +24,17 @@ API keys) and send it to the server without telling you.
 `mcp-audit` reads an MCP server's code before you install it and points out problems like this,
 with the file, the line and how to fix it.
 
-![mcp-audit output on the vulnerable demo server](docs/demo.png)
+![mcp-audit output on the vulnerable demo server](https://raw.githubusercontent.com/Ahany1440/mcp-auditor/main/docs/demo.png)
 
 ## Quick start
 
 You need Python 3.10 or newer. Nothing else gets installed.
 
 ```bash
-pip install git+https://github.com/Ahany1440/mcp-auditor
+pip install mcp-audit
 ```
+
+(or `pipx install mcp-audit` to keep it in its own environment)
 
 Then point it at a server:
 
@@ -57,8 +59,12 @@ when something serious (high or critical) is found, so you can use it in scripts
 | **Rug pull** | The tool description is downloaded or built at runtime, so it can change after you approved it. With `--pin`, it also tells you when tools actually change. |
 
 It works by matching known patterns in the code, not by running the server. It catches common
-mistakes, but a clean result doesn't prove a server is safe. [DESIGN.md](DESIGN.md) explains how
-it works and what it misses, and [RESULTS.md](RESULTS.md) shows what it found on real servers.
+mistakes, but a clean result doesn't prove a server is safe. [DESIGN.md](https://github.com/Ahany1440/mcp-auditor/blob/main/DESIGN.md) explains how
+it works and what it misses, and [RESULTS.md](https://github.com/Ahany1440/mcp-auditor/blob/main/RESULTS.md) shows what it found on real servers.
+
+**New: [State of MCP server security](https://github.com/Ahany1440/mcp-auditor/blob/main/SURVEY.md).** I scanned the 99 most-starred MCP
+server repos and checked every serious finding by hand. In short: no tool poisoning in 9,965 tools,
+over-broad tools everywhere, and the real bugs were in HTTP mode.
 
 ## More ways to run it
 
@@ -181,7 +187,7 @@ No findings. That doesn't prove the server is safe, only that none of the known 
 
 ## Detectors
 
-One module per detector in [`mcp_auditor/detectors/`](mcp_auditor/detectors).
+One module per detector in [`mcp_auditor/detectors/`](https://github.com/Ahany1440/mcp-auditor/tree/main/mcp_auditor/detectors).
 
 | ID | Name | What it looks for |
 |---|---|---|
@@ -236,4 +242,4 @@ SARIF 2.1.0 schema (`pip install jsonschema` to enable that one test).
 
 ## License
 
-MIT. See [LICENSE](LICENSE).
+MIT. See [LICENSE](https://github.com/Ahany1440/mcp-auditor/blob/main/LICENSE).

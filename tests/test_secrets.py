@@ -37,6 +37,17 @@ class SecretsTest(unittest.TestCase):
         })
         self.assertEqual(findings, [])
 
+    def test_private_key_needs_a_body_and_examples_are_skipped(self):
+        header = "-----BEGIN " + "PRIVATE KEY-----"
+        body = "MIIEvQIBADANBgkqhkiG9w0BAQEFAASC" * 3
+        findings = self.scan({
+            "label.json": f'{{"hint": "Paste the key starting with {header}"}}',
+            "fmt.ts": f'const pem = `{header}${{k}}`;',
+            "aws.yaml": "awsAccessKeyId: AKIA" + "IOSFODNN7EXAMPLE",
+            "key.py": 'KEY = """' + "\n".join([header, body, '"""']),
+        })
+        self.assertEqual([(f.file, f.message) for f in findings], [("key.py", "Private key committed in source.")])
+
 
 if __name__ == "__main__":
     unittest.main()

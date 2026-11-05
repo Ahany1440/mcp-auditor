@@ -25,7 +25,7 @@ PY_ALWAYS = re.compile(r"^(eval|exec|os\.system|os\.popen|subprocess\.getoutput|
 PY_SHELL_KW = re.compile(r"^subprocess\.(run|call|check_call|check_output|Popen)$")
 
 JS_PATTERNS = [
-    (r"(?<![.\w$])eval\(\s*(?![\"'`][^\"'`$]*[\"'`]\s*\))", "eval() on a dynamic string"),
+    (r"(?<![.\w$\"'`])eval\(\s*(?![\"'`][^\"'`$]*[\"'`]\s*\))", "eval() on a dynamic string"),
     (r"\bnew\s+Function\(", "new Function() builds code from a string"),
     (r"(?:(?<![.\w$])(?<!function )|\b(?:child_process|cp|childProcess)\.)(?:exec|execSync)\(\s*(?:`[^`]*\$\{|[\"'][^\"']*[\"']\s*\+|[A-Za-z_$][\w$.]*\s*[,)+])",
      "child_process exec() with a command built from variables (runs through a shell)"),

@@ -37,6 +37,9 @@ GENERIC = re.compile(
     r"""(?i)\b([\w-]*(?:api[_-]?key|secret|token|passw(?:or)?d|access[_-]?key|auth[_-]?key)[\w-]*)["']?\s*[:=]\s*["']([^"'\s]{16,})["']""")
 PLACEHOLDER = re.compile(r"(?i)your|example|xxx|changeme|placeholder|dummy|sample|redacted|<|>|\$\{|\{\{|process\.env|environ|getenv|\*\*\*")
 
+KEY_BODY = re.compile(r"\A(?:\s|\\n|\\r)*(?:[A-Za-z0-9+/=]|\\n){64,}")
+UUID = re.compile(r"(?i)[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}")
+
 
 def entropy(s: str) -> float:
     return -sum(c / len(s) * math.log2(c / len(s)) for c in Counter(s).values())
@@ -49,12 +52,17 @@ def mask(value: str) -> str:
 def detect(target: Target) -> list[Finding]:
     findings = []
     for f in target.files:
-        for n, line in enumerate(f.text.splitlines(), 1):
+        lines = f.text.splitlines()
+        for n, line in enumerate(lines, 1):
             if len(line) > 2000:  # minified or generated
                 continue
             hit = False
             for name, rx in PROVIDERS:
                 m = rx.search(line)
+                if m and PLACEHOLDER.search(m.group(0)):  # AKIAIOSFODNN7EXAMPLE, xoxb-your-token
+                    m = None
+                if m and name == "Private key" and not KEY_BODY.search(" ".join([line[m.end():]] + lines[n:n + 2])):
+                    m = None  # only the header: a label, placeholder or code that formats keys
                 if m:
                     findings.append(Finding(RULE, "high" if name != "JSON Web Token" else "medium",
                                             f"{name} committed in source.", f.path, n, evidence=mask(m.group(0))))
@@ -66,7 +74,10 @@ def detect(target: Target) -> list[Finding]:
             value = m.group(2) if m else ""
             # a list of secret *names* ("GITHUB_TOKEN,NPM_TOKEN", "api_key|password") is not a secret
             names_only = re.fullmatch(r"[A-Z0-9_,|. -]+", value) or re.fullmatch(r"(?i)\w+(\s*[,|]\s*\w+)+", value)
-            if m and not PLACEHOLDER.search(value) and not names_only and entropy(value) >= 3.5:
+            # random secrets almost always contain a digit; theme scopes ("keyword.control.ts") and words don't.
+            # UUIDs are request/record ids far more often than credentials.
+            not_secret = not re.search(r"\d", value) or UUID.fullmatch(value)
+            if m and not PLACEHOLDER.search(value) and not names_only and not not_secret and entropy(value) >= 3.5:
                 findings.append(Finding(RULE, "medium", f"Possible secret assigned to '{m.group(1)}'.", f.path, n,
                                         evidence=mask(m.group(2))))
     return findings

@@ -1,0 +1,38 @@
+name: release
+# Publishes to PyPI when a version tag (v1.2.3) is pushed.
+# Uses PyPI trusted publishing, so no API token is stored in the repo.
+on:
+  push:
+    tags: ["v*"]
+
+permissions:
+  contents: read
+
+jobs:
+  test:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.13"
+      - run: pip install jsonschema
+      - run: python -m unittest discover -s tests -t .
+
+  publish:
+    needs: test
+    runs-on: ubuntu-latest
+    environment: pypi
+    permissions:
+      id-token: write   # lets PyPI verify this workflow instead of using a token
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.13"
+      - name: Check the tag matches the package version
+        run: |
+          version=$(python -c "import mcp_auditor; print(mcp_auditor.__version__)")
+          [ "v$version" = "$GITHUB_REF_NAME" ] || { echo "tag $GITHUB_REF_NAME != version $version"; exit 1; }
+      - run: pip install build && python -m build
+      - uses: pypa/gh-action-pypi-publish@release/v1

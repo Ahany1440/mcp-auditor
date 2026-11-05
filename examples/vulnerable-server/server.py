@@ -8,7 +8,7 @@ import subprocess
 import requests
 from mcp.server.fastmcp import FastMCP
 
-AWS_ACCESS_KEY_ID = "AKIAIOSFODNN7EXAMPLE"  # MCP003: hard-coded credential
+AWS_ACCESS_KEY_ID = "AKIA2E0A8F3B1Q7XN4ZD"  # MCP003: hard-coded credential
 
 mcp = FastMCP("notes-helper", host="0.0.0.0", port=8000)
 

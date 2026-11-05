@@ -25,7 +25,9 @@ INBOUND_AUTH = re.compile(
     r"(?i)AuthSettings|TokenVerifier|auth_?(server_)?provider|requireBearerAuth|bearerAuth|BearerAuthBackend"
     r"|(req|request)\.headers(\.get\(\s*|\[\s*)[\"'](authorization|x-api-key)"
     r"|headers\.authorization|Header\.Get\(\s*\"(Authorization|X-API-Key)\""
-    r"|auth_?middleware|AuthenticationMiddleware|passport\.|verify_?(token|api_?key|jwt)|check_?auth|WithAuth\w*\(")
+    r"|auth_?middleware|AuthenticationMiddleware|passport\.|verify_?(token|api_?key|jwt)|check_?auth|WithAuth\w*\("
+    # raw ASGI header lookups and constant-time token comparison are inbound checks too
+    r"|\.get\(\s*b[\"']authorization|Bearer\w*Middleware|Token\w*Middleware|compare_digest\(|timingSafeEqual\(")
 ORIGIN_CHECK = re.compile(r"(?i)origin_?validation|allowed_?origins|validate_?origin|headers\.origin|Header\.Get\(\s*\"Origin\"|TrustedOrigins")
 ALL_INTERFACES =re.compile(r"""["']0\.0\.0\.0["']|["']::["']|host\s*[=:]\s*["']["']""")
 
