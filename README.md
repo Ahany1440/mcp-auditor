@@ -219,7 +219,7 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
-      - uses: Ahany1440/mcp-auditor@v0.2.0
+      - uses: Ahany1440/mcp-auditor@v0.3.0
         with:
           path: .            # folder to scan
           fail-on: high      # fail the job on high or critical findings
