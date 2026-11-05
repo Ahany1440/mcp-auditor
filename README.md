@@ -31,10 +31,10 @@ with the file, the line and how to fix it.
 You need Python 3.10 or newer. Nothing else gets installed.
 
 ```bash
-pip install mcp-audit
+pip install mcp-tool-audit
 ```
 
-(or `pipx install mcp-audit` to keep it in its own environment)
+(or `pipx install mcp-tool-audit` to keep it in its own environment). The command it installs is `mcp-audit`.
 
 Then point it at a server:
 

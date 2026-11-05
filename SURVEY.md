@@ -127,7 +127,7 @@ with no findings is not a safe repo.
 ## Reproduce it
 
 ```bash
-pip install mcp-audit
+pip install mcp-tool-audit
 git clone --depth 1 https://github.com/<owner>/<repo>
 mcp-audit <repo> --format json --fail-on none -o <repo>.json
 ```
