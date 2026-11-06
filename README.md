@@ -80,7 +80,32 @@ Other targets:
 mcp-audit https://github.com/owner/repo/tree/main/src/x   # one subfolder of a repo
 mcp-audit path/to/server --stdio "python server.py"       # also check the tools the running server reports
 mcp-audit --stdio "npx -y some-mcp-server"                # only the running server's tools
+mcp-audit --url https://example.com/mcp                   # a remote server, where there is no code to read
 ```
+
+### Checking a remote server
+
+`--url` talks to a live endpoint over Streamable HTTP. It reports:
+
+- whether anyone can list its tools without logging in;
+- plain HTTP to another machine;
+- whether it rejects a foreign `Origin` header (this is what stops DNS rebinding);
+- on a 401, whether it tells clients how to log in (`WWW-Authenticate`, RFC 9728 OAuth metadata);
+- everything the other checks find in the tools it returns. `--pin` and `--repeat` work here too.
+
+```bash
+mcp-audit --url https://example.com/mcp --header "Authorization: Bearer $TOKEN"
+```
+
+Without a token on a server that requires one, the tools and the `Origin` check can't be tested. The
+report says so, but this is not a failure: the exit code stays 0 unless you use `--fail-on low`. Credentials are only sent to that URL: redirects are not followed, plain-HTTP proxy settings are
+ignored, and they are refused over plain HTTP unless the server is on your own machine. A key in the URL's query
+string counts as a credential and is left out of reports.
+
+`--url` sends real requests but never calls a tool: only `initialize`, `notifications/initialized`, `tools/list`,
+metadata `GET`s and a `DELETE` that ends its own session. Only use it on servers you run or use. It doesn't find logic bugs such as
+broken login flows, doesn't test whether a tool call really requires a login, and doesn't support the old
+HTTP+SSE transport.
 
 ### Catching tools that change after you approved them
 
@@ -108,10 +133,12 @@ Options:
 | `--format text\|json\|sarif` | Output format (default `text`). |
 | `-o FILE` | Write the report to a file instead of stdout. |
 | `--fail-on low\|medium\|high\|critical\|none` | Exit with code 1 if any finding is at or above this severity (default `high`). |
+| `--url URL` | Check this remote MCP endpoint (see above). Can't be combined with `--stdio`. |
+| `--header 'NAME: VALUE'` | With `--url`, send this header, usually a token. Repeatable. |
 | `--stdio CMD` | Start this stdio server, run `initialize` and `tools/list`, and audit the tools it returns. **This runs the server's code on your machine.** Only use it on servers you would run anyway. |
-| `--timeout SECONDS` | How long to wait for the `--stdio` server (default 30). |
+| `--timeout SECONDS` | How long to wait for the `--stdio` server, or for the whole `--url` scan (default 30). |
 | `--pin FILE` | Save the tools to FILE on the first run; on later runs, report tools that were added, changed or removed. |
-| `--repeat N` | With `--stdio`, ask for `tools/list` N times and flag tools that change between answers (default 3). |
+| `--repeat N` | With `--stdio` or `--url`, ask for `tools/list` N times and flag tools that change between answers (default 3). |
 
 Exit codes: `0` no findings at or above `--fail-on`, `1` there are, `2` the scan itself failed
 (bad path, clone failed, server did not answer).
@@ -126,7 +153,7 @@ Test folders (`tests/`, `__tests__/`, `fixtures/`, `*.test.ts`, `test_*.py`, ...
 
 ```text
 $ mcp-audit examples/vulnerable-server
-mcp-audit 0.1.0: examples/vulnerable-server
+mcp-audit 0.4.0: examples/vulnerable-server
 1 files, 6 tools found (0 from tools/list)
 
 CRITICAL MCP001 tool-poisoning         server.py:20  [tool: add]
@@ -177,7 +204,7 @@ How to fix:
 Summary: 4 critical, 6 high, 3 medium, 0 low
 
 $ mcp-audit examples/clean-server
-mcp-audit 0.1.0: examples/clean-server
+mcp-audit 0.4.0: examples/clean-server
 1 files, 6 tools found (0 from tools/list)
 
 No findings. That doesn't prove the server is safe, only that none of the known patterns matched.
@@ -197,6 +224,7 @@ One module per detector in [`mcp_auditor/detectors/`](https://github.com/Ahany14
 | MCP004 | `unsafe-execution` | `eval`/`exec`, `os.system`, `subprocess(..., shell=True)`, `child_process.exec` with a built string, `spawn(..., {shell: true})`, `new Function`, `vm.run*`, Go `exec.Command("sh", "-c", ...)`. In Python, critical when a tool parameter reaches the call. |
 | MCP005 | `missing-auth` | Servers that start an SSE or streamable-HTTP transport when nothing in the codebase checks an incoming credential. Critical when it also binds to `0.0.0.0`; medium when there is at least an `Origin` check. |
 | MCP006 | `rug-pull-risk` | Tool descriptions that are not literals in the code: downloaded at runtime, read from environment variables, or built from variables. Also servers that send `tools/list_changed`, since they can swap tools after you approved them. With `--pin` or `--stdio`, also reports tools that actually changed: since the pin, or between repeated `tools/list` calls. |
+| MCP007 | `remote-endpoint` | With `--url` only: an endpoint that lists tools without a login, plain HTTP, no `Origin` check, or missing or wrong OAuth metadata. High when open or unencrypted on another machine, or when a local server can be reached through DNS rebinding. |
 
 Severities: `critical` means tool input clearly reaches something dangerous; `high` is a strong
 signal worth fixing; `medium` needs a look; `low` is informational.
@@ -219,7 +247,7 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
-      - uses: Ahany1440/mcp-auditor@v0.3.0
+      - uses: Ahany1440/mcp-auditor@v0.4.0
         with:
           path: .            # folder to scan
           fail-on: high      # fail the job on high or critical findings

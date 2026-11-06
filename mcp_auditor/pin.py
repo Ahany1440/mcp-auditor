@@ -35,7 +35,9 @@ def snapshot(tools: list[Tool]) -> dict[str, dict]:
 
 def save(path: str, tools: list[Tool]) -> None:
     data = {"pinned_by": f"mcp-audit {__version__}", "tools": snapshot(tools)}
-    Path(path).write_text(json.dumps(data, indent=2, sort_keys=True, ensure_ascii=False) + "\n", encoding="utf-8")
+    text = json.dumps(data, indent=2, sort_keys=True, ensure_ascii=False) + "\n"
+    text.encode("utf-8")  # fail before the file is opened: an empty lock file would break every later run
+    Path(path).write_text(text, encoding="utf-8")
 
 
 def load(path: str) -> dict[str, dict]:
@@ -59,7 +61,7 @@ def compare(old: dict[str, dict], tools: list[Tool], since: str) -> list[Finding
                                     t.file, t.line, t.name, _first_difference(old[key], d)))
     for key in old:
         # only report removals for the kind of scan that ran this time (static vs live)
-        if key not in new and key.split(":", 1)[0] in sources:
+        if key not in new and (not new or key.split(":", 1)[0] in sources):
             name = key.split(":", 1)[1]
             findings.append(Finding(RULE, "low", f"Tool '{name}' was removed {since}.", tool=name))
     return findings

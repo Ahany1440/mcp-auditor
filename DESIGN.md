@@ -17,11 +17,12 @@ actually returns from `tools/list`.
 ## Pipeline
 
 ```
-target (folder | GitHub URL | --stdio command)
+target (folder | GitHub URL | --stdio command | --url endpoint)
         |
         v
 source.py   load files, skip tests/vendor/build output        live.py  initialize + tools/list
             find tools: Python AST, JS/TS/Go regexes                   (paginated, JSON-RPC over stdio)
+                                                              remote.py  the same over HTTP, plus MCP007
         \__________________________ Target __________________________/
                                       |  files: [SourceFile]
                                       |  tools: [Tool(name, description, params, file, line, end_line)]
@@ -49,6 +50,10 @@ types; `detectors/_python.py` holds the AST helpers that three detectors share.
   hidden characters written as escapes are still seen.
 - **Go**: regexes for `mcp.NewTool("name", mcp.WithDescription(...))` (mark3labs/mcp-go) and
   `mcp.Tool{Name: ..., Description: ...}` (the official go-sdk, including `t("KEY", "default")`).
+- **Remote**: `--url` first tries the endpoint with no credentials, then with any given, then with a
+  foreign `Origin` header. What it learns about the door becomes MCP007 findings, and the tools go
+  through the same detectors. The server is untrusted: redirects are not followed, replies and tool
+  counts are capped, and a watchdog ends the run if `--timeout` plus 10 seconds passes.
 - **Live**: `--stdio` starts the server, sends `initialize`, `notifications/initialized` and
   `tools/list` (following `nextCursor`), and turns the result into the same `Tool` objects. Live
   tools have no source location, so code-based checks can't apply to them; the description-based
@@ -146,6 +151,9 @@ program analysis.
 - **Tool poisoning is pattern-based.** Paraphrased or non-English instructions will get through.
   There is no model in the loop on purpose: results are deterministic and the scanner can't be
   prompt-injected by the server it is scanning.
+- **`--url` checks the door, not what is behind it.** It sees whether tools can be listed without a
+  login, not whether a tool call needs one, because calling a tool could have side effects. Logic
+  bugs in login flows are out of reach, and the old HTTP+SSE transport isn't supported.
 - **Test, build and vendor folders are skipped**, so a secret committed under `tests/` is not
   reported.
 - **`--stdio` runs the server.** It is as dangerous as installing the server. Use it in a

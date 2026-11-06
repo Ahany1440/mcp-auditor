@@ -113,6 +113,8 @@ def check_text(text: str) -> list[tuple[str, str, str]]:
 def detect(target: Target) -> list[Finding]:
     findings = []
     flagged_invisible: set[tuple[str, int]] = set()
+    named = sorted({t.name for t in target.tools if len(t.name) >= 4 and "_" in t.name})
+    named = [(name, name.lower()) for name in named]
     for tool in target.tools:
         fields = [("name", tool.name), ("description", tool.description)]
         fields += [(f"parameter '{p}' description" if not p.startswith("param") else "a parameter description", d)
@@ -131,8 +133,10 @@ def detect(target: Target) -> list[Finding]:
                 if "invisible" in why and tool.file:
                     flagged_invisible.update((tool.file, n) for n in range(tool.line or 0, (tool.end_line or tool.line or 0) + 1))
         # A description that tells the model to call some other tool is how cross-tool hijacking starts.
-        others = {t.name for t in target.tools if t.name != tool.name and len(t.name) >= 4 and "_" in t.name}
-        for other in sorted(others):
+        lowered = tool.description.lower()
+        for other, low in named:
+            if low not in lowered or other == tool.name:  # the plain check first: servers can list thousands of tools
+                continue
             m = re.search(rf"\b(call|use|run|invoke|send|pass)\b.{{0,40}}\b{re.escape(other)}\b.{{0,40}}", tool.description, re.I | re.S)
             if m:
                 # "Use read_text_file instead" is normal cross-referencing; ordering the model around is less so

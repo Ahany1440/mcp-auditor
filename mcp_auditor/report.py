@@ -3,6 +3,7 @@ from __future__ import annotations
 
 import json
 import os
+import re
 import sys
 import textwrap
 from collections import Counter
@@ -15,12 +16,14 @@ COLORS = {"critical": "\033[1;97;41m", "high": "\033[1;31m", "medium": "\033[33m
 SARIF_LEVEL = {"critical": "error", "high": "error", "medium": "warning", "low": "note"}
 SECURITY_SEVERITY = {"critical": "9.5", "high": "8.0", "medium": "5.5", "low": "3.0"}  # GitHub's 0-10 scale
 HOME = "https://github.com/Ahany1440/mcp-auditor"
+# a server must not be able to rewrite the terminal with escape codes, or forge report lines with newlines
+CONTROL = re.compile("[\\x00-\\x08\\x0a-\\x1f\\x7f-\\x9f\\u200e\\u200f\\u2028-\\u202e\\u2066-\\u2069]")
 
 
 def _where(f: Finding) -> str:
     if f.file:
         return f"{f.file}:{f.line}" if f.line else f.file
-    return "tools/list (live)"
+    return "endpoint" if f.rule.id == "MCP007" else "tools/list (live)"
 
 
 def to_text(target: Target, findings: list[Finding], color: bool | None = None) -> str:
@@ -31,13 +34,13 @@ def to_text(target: Target, findings: list[Finding], color: bool | None = None) 
     out = [f"mcp-audit {__version__}: {target.label}",
            f"{len(target.files)} files, {len(target.tools)} tools found ({live} from tools/list)", ""]
     for f in findings:
-        tool = f"  [tool: {f.tool}]" if f.tool else ""
+        tool = f"  [tool: {CONTROL.sub('?', f.tool)}]" if f.tool else ""
         out.append(f"{paint(f.severity, f.severity.upper().ljust(8))} {f.rule.id} {f.rule.name:<22} {_where(f)}{tool}")
-        out.append(f"         {f.message}")
+        out.append(f"         {CONTROL.sub('?', f.message)}")
         if f.evidence:
-            out.append(f"         > {f.evidence}")
+            out.append(f"         > {CONTROL.sub('?', f.evidence)}")
         out.append("")
-    if not target.tools:
+    if not target.tools and not any(f.rule.id == "MCP007" for f in findings):
         out += ["Note: no MCP tools were found here. Is this the folder of an MCP server?", ""]
     if not findings:
         out.append("No findings. That doesn't prove the server is safe, only that none of the known patterns matched.")
@@ -97,4 +100,4 @@ def to_sarif(target: Target, findings: list[Finding], uri_prefix: str = "") -> s
 
 def _default_severity(rule_id: str) -> str:
     return {"MCP001": "high", "MCP002": "medium", "MCP003": "high", "MCP004": "critical",
-            "MCP005": "high", "MCP006": "medium"}[rule_id]
+            "MCP005": "high", "MCP006": "medium", "MCP007": "high"}[rule_id]
