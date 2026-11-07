@@ -3,7 +3,8 @@
 Python: AST. Flags eval/exec, os.system/os.popen, subprocess.*(shell=True) and
 create_subprocess_shell whose arguments are not constants. "critical" when a tool
 parameter reaches the call inside a tool handler, "high" when any function parameter
-does, "medium" when the argument is dynamic but its source is unclear.
+does, "medium" when the argument is dynamic but its source is unclear, or when exec/eval runs only
+after a check of its input and with __builtins__ replaced (a sandboxed expression evaluator).
 JS/TS/Go: regexes for eval, new Function, child_process exec with a non-literal
 command, spawn(..., {shell: true}) and exec.Command("sh", "-c", ...). "critical" when
 the call sits inside a tool handler, "medium" elsewhere (no data-flow trace).
@@ -68,6 +69,95 @@ def _py_sink(call: ast.Call, name: str, shell_kw: bool) -> str | None:
     return None
 
 
+
+NOT_A_CHECK = {"len", "isinstance", "str", "bool", "type", "hasattr", "callable", "print"}
+
+
+def _runs_before(fn: ast.AST, call: ast.Call) -> list[ast.stmt]:
+    """Statements of fn that always run before the statement holding call, in order: its earlier siblings,
+    then those of each enclosing block. A statement inside an earlier if/loop/with is not one of them."""
+    parent, todo = {}, [fn]
+    while todo:
+        node = todo.pop()
+        for child in ast.iter_child_nodes(node):
+            if not isinstance(child, (ast.FunctionDef, ast.AsyncFunctionDef, ast.Lambda, ast.ClassDef)):
+                parent[child] = node
+                todo.append(child)
+    chain, node = [], call
+    while node in parent:
+        up = parent[node]
+        for field in ("body", "orelse", "finalbody"):  # an earlier except handler may not have run
+            block = getattr(up, field, None)
+            if isinstance(block, list) and node in block:
+                chain = block[:block.index(node)] + chain
+        node = up
+    return chain
+
+
+def _stops(stmt: ast.If) -> bool:
+    return bool(stmt.body) and isinstance(stmt.body[-1], (ast.Raise, ast.Return))
+
+
+def _checked_call(test: ast.expr, results: dict[str, str], arg: str) -> str | None:
+    """The check named by `not ok`, `not check(arg)` or `not check(arg)[0]`, or None."""
+    if not (isinstance(test, ast.UnaryOp) and isinstance(test.op, ast.Not)):
+        return None
+    inner = test.operand.value if isinstance(test.operand, ast.Subscript) else test.operand
+    if isinstance(inner, ast.Name):
+        return results.get(inner.id)
+    if isinstance(inner, ast.Call) and any(isinstance(a, ast.Name) and a.id == arg for a in inner.args[:1]):
+        return py.dotted(inner.func)
+    return None
+
+
+def _validator(fn: ast.AST, call: ast.Call) -> str | None:
+    """Name of the check that gates exec/eval, or None.
+
+    Matches `ok, err = check(src)` or `ok = check(src)` then `if not ok: raise/return`, and
+    `if not check(src): raise/return`, where src is the very name exec/eval runs. The check must run on
+    every path to the call (not inside an earlier branch or loop), and neither src nor the check's result
+    may be assigned again anywhere else in the function.
+    """
+    if not (call.args and isinstance(call.args[0], ast.Name)):
+        return None
+    arg = call.args[0].id
+    stores = [n for n in ast.walk(fn) if isinstance(n, ast.Name) and isinstance(n.ctx, (ast.Store, ast.Del))]
+    if any(n.id == arg for n in stores):
+        return None  # src is reassigned somewhere: what is checked may not be what runs
+    results = {}
+    for stmt in _runs_before(fn, call):
+        if isinstance(stmt, ast.Assign) and len(stmt.targets) == 1 and isinstance(stmt.value, ast.Call) \
+                and any(isinstance(a, ast.Name) and a.id == arg for a in stmt.value.args[:1]):
+            target = stmt.targets[0]
+            first = target.elts[0] if isinstance(target, ast.Tuple) and target.elts else target
+            if isinstance(first, ast.Name) and sum(n.id == first.id for n in stores) == 1:
+                results[first.id] = py.dotted(stmt.value.func)
+        elif isinstance(stmt, ast.If) and _stops(stmt):
+            check = _checked_call(stmt.test, results, arg)
+            if check and check.rsplit(".", 1)[-1] not in NOT_A_CHECK:
+                return check
+    return None
+
+
+def _replaces_builtins(call: ast.Call, fn: ast.AST) -> bool:
+    """True when exec/eval gets a globals dict whose __builtins__ is not the real builtins."""
+    g = call.args[1] if len(call.args) > 1 else next((k.value for k in call.keywords if k.arg == "globals"), None)
+    if isinstance(g, ast.Name):
+        name = g.id
+        # one plain assignment that runs before the call, and the dict is not changed afterwards
+        g = next((n.value for n in _runs_before(fn, call) if isinstance(n, (ast.Assign, ast.AnnAssign)) and n.value is not None
+                  and name in py.names_in(n.targets[0] if isinstance(n, ast.Assign) else n.target)), None)
+        writes = sum(isinstance(n, ast.Name) and n.id == name and isinstance(n.ctx, (ast.Store, ast.Del)) for n in ast.walk(fn))
+        changed = any(isinstance(n, (ast.Subscript, ast.Attribute)) and isinstance(n.value, ast.Name) and n.value.id == name
+                      and (isinstance(n.ctx, (ast.Store, ast.Del)) or isinstance(n, ast.Attribute)) for n in ast.walk(fn))
+        if writes != 1 or changed:
+            return False
+    if not isinstance(g, ast.Dict):
+        return False
+    value = next((v for k, v in zip(g.keys, g.values) if isinstance(k, ast.Constant) and k.value == "__builtins__"), None)
+    return value is not None and not (isinstance(value, ast.Name) and value.id in ("__builtins__", "builtins"))
+
+
 def _python(f: SourceFile) -> list[Finding]:
     tree = py.parse(f)
     if tree is None:
@@ -95,6 +185,13 @@ def _python(f: SourceFile) -> list[Finding]:
             msg = f"{name}() {how}receives input from {who}."
         else:
             sev, msg = "medium", f"{name}() {how}is called with a dynamic argument."
+        # a sandboxed expression evaluator: the input is checked first and the builtins are swapped out.
+        # Restricted builtins alone are easy to escape, so this lowers the severity instead of dropping it.
+        check = _validator(scope[0], call) if scope and name.rsplit(".", 1)[-1] in ("exec", "eval") and sev != "medium" else None
+        if check and _replaces_builtins(call, scope[0]):
+            sev = "medium"
+            msg += (f" It runs only after {check}() accepts the input, with __builtins__ replaced; check that "
+                    f"{check}() is an allow-list that also rejects dunder attribute access.")
         if (call.lineno, name) not in seen:
             seen.add((call.lineno, name))
             findings.append(Finding(RULE, sev, msg, f.path, call.lineno,
