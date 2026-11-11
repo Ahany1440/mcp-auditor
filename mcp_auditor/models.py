@@ -104,6 +104,8 @@ class Target:
     label: str                      # what the user passed (path or URL)
     files: list[SourceFile] = field(default_factory=list)
     tools: list[Tool] = field(default_factory=list)
+    skipped: list[dict] = field(default_factory=list)  # {"path", "reason", "files"}: code that was not scanned
+    from_source: bool = False  # loaded from a folder/file/repo (not only from a live tools/list)
 
     def file(self, path: str) -> SourceFile | None:
         return next((f for f in self.files if f.path == path), None)
