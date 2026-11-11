@@ -43,7 +43,7 @@ def _python(f: SourceFile) -> list[Finding]:
         called = set().union(*(py.names_in(n.func) for n in ast.walk(expr) if isinstance(n, ast.Call)))
         data = set().union(set(), *(py.names_in(a) for n in ast.walk(expr) if isinstance(n, ast.Call)
                                     for a in n.args + [k.value for k in n.keywords]))
-        src = ast.get_source_segment(f.text, expr) or ""
+        src = f.segment(expr) or ""
         if not (py.names_in(expr) - constants - (called - data)) and not NETWORK.search(src):
             return
         remote = bool(NETWORK.search(f.text))
@@ -66,7 +66,7 @@ def _python(f: SourceFile) -> list[Finding]:
         elif isinstance(node, ast.Assign):
             for t in node.targets:
                 if isinstance(t, ast.Attribute) and (t.attr == "__doc__" or sdk and t.attr == "description") and not isinstance(node.value, ast.Constant):
-                    check(node.value, f"Assignment to {ast.get_source_segment(f.text, t)}:", node.lineno)
+                    check(node.value, f"Assignment to {f.segment(t)}:", node.lineno)
     return findings
 
 

@@ -49,7 +49,7 @@ def _python(f: SourceFile, target: Target) -> list[Finding]:
             continue
         tool = target.tool_at(f.path, fn.lineno)
         name = tool.name if tool else fn.name
-        body = ast.get_source_segment(f.text, fn) or ""
+        body = f.segment(fn) or ""
         tainted = py.tainted_names(fn)
         for cat, (sev, what, call_rx, _, guard_rx, _) in CATEGORIES.items():
             if re.search(guard_rx, body):
@@ -63,7 +63,7 @@ def _python(f: SourceFile, target: Target) -> list[Finding]:
 
 
 def _windowed(f: SourceFile, tool: Tool) -> list[Finding]:
-    lines = f.text.splitlines()[tool.line - 1: tool.end_line]
+    lines = f.lines[tool.line - 1: tool.end_line]
     body = "\n".join(lines)
     findings = []
     for cat, (sev, what, _, text_rx, guard_rx, _) in CATEGORIES.items():
