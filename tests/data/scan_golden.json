@@ -207,6 +207,15 @@
     "call fetch_page with the result first."
    ],
    [
+    "MCP001",
+    "medium",
+    "Tool 'search' description could not be resolved to text, so it was not fully checked for hidden instructions.",
+    "server.py",
+    58,
+    "search",
+    null
+   ],
+   [
     "MCP002",
     "medium",
     "Tool 'read_note' reads or writes files at a path taken from tool input with no allow-list or path check.",
@@ -1041,6 +1050,276 @@
     32,
     "go_tool_9",
     "exec.Command(\"sh\", \"-c\", arg)"
+   ],
+   [
+    "MCP001",
+    "medium",
+    "Tool 'dyn_0' description could not be resolved to text, so it was not fully checked for hidden instructions.",
+    "a.js",
+    9,
+    "dyn_0",
+    null
+   ],
+   [
+    "MCP001",
+    "medium",
+    "Tool 'dyn_1' description could not be resolved to text, so it was not fully checked for hidden instructions.",
+    "a.js",
+    19,
+    "dyn_1",
+    null
+   ],
+   [
+    "MCP001",
+    "medium",
+    "Tool 'dyn_2' description could not be resolved to text, so it was not fully checked for hidden instructions.",
+    "a.js",
+    29,
+    "dyn_2",
+    null
+   ],
+   [
+    "MCP001",
+    "medium",
+    "Tool 'dyn_3' description could not be resolved to text, so it was not fully checked for hidden instructions.",
+    "a.js",
+    39,
+    "dyn_3",
+    null
+   ],
+   [
+    "MCP001",
+    "medium",
+    "Tool 'dyn_4' description could not be resolved to text, so it was not fully checked for hidden instructions.",
+    "a.js",
+    49,
+    "dyn_4",
+    null
+   ],
+   [
+    "MCP001",
+    "medium",
+    "Tool 'dyn_5' description could not be resolved to text, so it was not fully checked for hidden instructions.",
+    "a.js",
+    59,
+    "dyn_5",
+    null
+   ],
+   [
+    "MCP001",
+    "medium",
+    "Tool 'dyn_6' description could not be resolved to text, so it was not fully checked for hidden instructions.",
+    "a.js",
+    69,
+    "dyn_6",
+    null
+   ],
+   [
+    "MCP001",
+    "medium",
+    "Tool 'dyn_7' description could not be resolved to text, so it was not fully checked for hidden instructions.",
+    "a.js",
+    79,
+    "dyn_7",
+    null
+   ],
+   [
+    "MCP001",
+    "medium",
+    "Tool 'dyn_8' description could not be resolved to text, so it was not fully checked for hidden instructions.",
+    "a.js",
+    89,
+    "dyn_8",
+    null
+   ],
+   [
+    "MCP001",
+    "medium",
+    "Tool 'dyn_9' description could not be resolved to text, so it was not fully checked for hidden instructions.",
+    "a.js",
+    99,
+    "dyn_9",
+    null
+   ],
+   [
+    "MCP001",
+    "medium",
+    "Tool 'dyn_10' description could not be resolved to text, so it was not fully checked for hidden instructions.",
+    "a.js",
+    109,
+    "dyn_10",
+    null
+   ],
+   [
+    "MCP001",
+    "medium",
+    "Tool 'dyn_11' description could not be resolved to text, so it was not fully checked for hidden instructions.",
+    "a.js",
+    119,
+    "dyn_11",
+    null
+   ],
+   [
+    "MCP001",
+    "medium",
+    "Tool 'dyn_12' description could not be resolved to text, so it was not fully checked for hidden instructions.",
+    "a.js",
+    129,
+    "dyn_12",
+    null
+   ],
+   [
+    "MCP001",
+    "medium",
+    "Tool 'dyn_13' description could not be resolved to text, so it was not fully checked for hidden instructions.",
+    "a.js",
+    139,
+    "dyn_13",
+    null
+   ],
+   [
+    "MCP001",
+    "medium",
+    "Tool 'dyn_14' description could not be resolved to text, so it was not fully checked for hidden instructions.",
+    "a.js",
+    149,
+    "dyn_14",
+    null
+   ],
+   [
+    "MCP001",
+    "medium",
+    "Tool 'dyn_15' description could not be resolved to text, so it was not fully checked for hidden instructions.",
+    "a.js",
+    159,
+    "dyn_15",
+    null
+   ],
+   [
+    "MCP001",
+    "medium",
+    "Tool 'dyn_16' description could not be resolved to text, so it was not fully checked for hidden instructions.",
+    "a.js",
+    169,
+    "dyn_16",
+    null
+   ],
+   [
+    "MCP001",
+    "medium",
+    "Tool 'dyn_17' description could not be resolved to text, so it was not fully checked for hidden instructions.",
+    "a.js",
+    179,
+    "dyn_17",
+    null
+   ],
+   [
+    "MCP001",
+    "medium",
+    "Tool 'dyn_18' description could not be resolved to text, so it was not fully checked for hidden instructions.",
+    "a.js",
+    189,
+    "dyn_18",
+    null
+   ],
+   [
+    "MCP001",
+    "medium",
+    "Tool 'dyn_19' description could not be resolved to text, so it was not fully checked for hidden instructions.",
+    "a.js",
+    199,
+    "dyn_19",
+    null
+   ],
+   [
+    "MCP001",
+    "medium",
+    "Tool 'dyn_20' description could not be resolved to text, so it was not fully checked for hidden instructions.",
+    "a.js",
+    209,
+    "dyn_20",
+    null
+   ],
+   [
+    "MCP001",
+    "medium",
+    "Tool 'dyn_21' description could not be resolved to text, so it was not fully checked for hidden instructions.",
+    "a.js",
+    219,
+    "dyn_21",
+    null
+   ],
+   [
+    "MCP001",
+    "medium",
+    "Tool 'dyn_22' description could not be resolved to text, so it was not fully checked for hidden instructions.",
+    "a.js",
+    229,
+    "dyn_22",
+    null
+   ],
+   [
+    "MCP001",
+    "medium",
+    "Tool 'dyn_23' description could not be resolved to text, so it was not fully checked for hidden instructions.",
+    "a.js",
+    239,
+    "dyn_23",
+    null
+   ],
+   [
+    "MCP001",
+    "medium",
+    "Tool 'dyn_24' description could not be resolved to text, so it was not fully checked for hidden instructions.",
+    "a.js",
+    249,
+    "dyn_24",
+    null
+   ],
+   [
+    "MCP001",
+    "medium",
+    "Tool 'dyn_0' description could not be resolved to text, so it was not fully checked for hidden instructions.",
+    "b.js",
+    9,
+    "dyn_0",
+    null
+   ],
+   [
+    "MCP001",
+    "medium",
+    "Tool 'dyn_1' description could not be resolved to text, so it was not fully checked for hidden instructions.",
+    "b.js",
+    19,
+    "dyn_1",
+    null
+   ],
+   [
+    "MCP001",
+    "medium",
+    "Tool 'dyn_2' description could not be resolved to text, so it was not fully checked for hidden instructions.",
+    "b.js",
+    29,
+    "dyn_2",
+    null
+   ],
+   [
+    "MCP001",
+    "medium",
+    "Tool 'dyn_3' description could not be resolved to text, so it was not fully checked for hidden instructions.",
+    "b.js",
+    39,
+    "dyn_3",
+    null
+   ],
+   [
+    "MCP001",
+    "medium",
+    "Tool 'dyn_4' description could not be resolved to text, so it was not fully checked for hidden instructions.",
+    "b.js",
+    49,
+    "dyn_4",
+    null
    ],
    [
     "MCP002",
@@ -4012,6 +4291,24 @@
     "DESCRIPTIONS[\"lookup\"]"
    ],
    [
+    "MCP001",
+    "medium",
+    "Tool 'lookup' description could not be resolved to text, so it was not fully checked for hidden instructions.",
+    "server.py",
+    8,
+    "lookup",
+    null
+   ],
+   [
+    "MCP001",
+    "medium",
+    "Tool 'summarize' description could not be resolved to text, so it was not fully checked for hidden instructions.",
+    "server.ts",
+    1,
+    "summarize",
+    null
+   ],
+   [
     "MCP006",
     "medium",
     "Tool description is not a string literal and comes from the environment.",
@@ -4056,7 +4353,7 @@
   "tools": [
    [
     "lookup",
-    "",
+    "Look up a word in the dictionary.",
     {},
     "server.py",
     10,
@@ -4065,7 +4362,7 @@
    ],
    [
     "define",
-    "",
+    "\n            Define a word.\n        ",
     {},
     "server.py",
     11,

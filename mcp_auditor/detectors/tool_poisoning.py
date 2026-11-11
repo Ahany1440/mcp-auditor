@@ -116,6 +116,9 @@ def detect(target: Target) -> list[Finding]:
     named = sorted({t.name for t in target.tools if len(t.name) >= 4 and "_" in t.name})
     named = [(name, name.lower()) for name in named]
     for tool in target.tools:
+        if "description" in tool.unresolved:  # built from something the scanner can't evaluate: say so, don't pass it
+            findings.append(Finding(RULE, "medium", f"Tool '{tool.name}' description could not be resolved to text, "
+                                    "so it was not fully checked for hidden instructions.", tool.file, tool.line, tool.name))
         fields = [("name", tool.name), ("description", tool.description)]
         fields += [(f"parameter '{p}' description" if not p.startswith("param") else "a parameter description", d)
                    for p, d in tool.params.items()]
