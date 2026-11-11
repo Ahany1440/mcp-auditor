@@ -37,14 +37,23 @@ def _python(f: SourceFile) -> list[Finding]:
                  for t in node.targets if isinstance(t, ast.Name)}
     findings = []
     sdk = imports_mcp(f)
+    # `self.description = description` in __init__ only stores what the caller passed in; whether that value
+    # is fetched or built is decided where the object is created, so the assignment itself is reported low
+    stored_args = {id(n) for fn in py.functions(tree) if fn.name == "__init__"
+                   for n in ast.walk(fn) if isinstance(n, ast.Assign) and isinstance(n.value, ast.Name)
+                   and n.value.id in {a.arg for a in fn.args.args + fn.args.kwonlyargs + fn.args.posonlyargs}}
 
-    def check(expr: ast.expr, where: str, line: int) -> None:
+    def check(expr: ast.expr, where: str, line: int, stored_arg: bool = False) -> None:
         # names used only as the function being called (dedent, textwrap.dedent) are not data
         called = set().union(*(py.names_in(n.func) for n in ast.walk(expr) if isinstance(n, ast.Call)))
         data = set().union(set(), *(py.names_in(a) for n in ast.walk(expr) if isinstance(n, ast.Call)
                                     for a in n.args + [k.value for k in n.keywords]))
         src = f.segment(expr) or ""
         if not (py.names_in(expr) - constants - (called - data)) and not NETWORK.search(src):
+            return
+        if stored_arg:
+            findings.append(Finding(RULE, "low", f"{where} description is the constructor's own argument, stored as is; "
+                                    "check where the object is created.", f.path, line, evidence=src[:160]))
             return
         remote = bool(NETWORK.search(f.text))
         env = bool(ENV.search(src))
@@ -66,7 +75,8 @@ def _python(f: SourceFile) -> list[Finding]:
         elif isinstance(node, ast.Assign):
             for t in node.targets:
                 if isinstance(t, ast.Attribute) and (t.attr == "__doc__" or sdk and t.attr == "description") and not isinstance(node.value, ast.Constant):
-                    check(node.value, f"Assignment to {f.segment(t)}:", node.lineno)
+                    check(node.value, f"Assignment to {f.segment(t)}:", node.lineno,
+                          stored_arg=id(node) in stored_args)
     return findings
 
 
