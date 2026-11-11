@@ -162,7 +162,7 @@ program analysis.
 ## Why these choices
 
 - **Python and the standard library only**: `pip install` brings in nothing else, the GitHub
-  Action runs with the runner's `python3` and no install step, and there is no dependency
+  Action only adds `actions/setup-python`, and there is no dependency
   supply chain to worry about in a security tool.
 - **Regex for JS/TS/Go instead of real parsers**: real parsers would mean tree-sitter or a Node
   toolchain as a dependency. Most MCP servers use a handful of SDK call shapes, and regexes cover

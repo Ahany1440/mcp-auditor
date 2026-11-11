@@ -159,7 +159,7 @@ change the exit code.
 
 ```text
 $ mcp-audit examples/vulnerable-server
-mcp-audit 0.4.0: examples/vulnerable-server
+mcp-audit 0.5.0: examples/vulnerable-server
 1 files, 6 tools found (0 from tools/list)
 
 CRITICAL MCP001 tool-poisoning         server.py:20  [tool: add]
@@ -207,16 +207,16 @@ How to fix:
     instead of eval for expressions.
   ...
 
-Summary: 4 critical, 6 high, 3 medium, 0 low
+Summary: 4 critical, 6 high, 4 medium, 0 low
 
 $ mcp-audit examples/clean-server
-mcp-audit 0.4.0: examples/clean-server
+mcp-audit 0.5.0: examples/clean-server
 1 files, 6 tools found (0 from tools/list)
 
 No findings. That doesn't prove the server is safe, only that none of the known patterns matched.
 ```
 
-(Output shortened; the full run has 13 findings.)
+(Output shortened; the full run has 14 findings.)
 
 ## Detectors
 
@@ -274,7 +274,7 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
-      - uses: Ahany1440/mcp-auditor@v0.4.0
+      - uses: Ahany1440/mcp-auditor@v0.5.0
         with:
           path: .            # folder to scan
           fail-on: high      # fail the job on high or critical findings
