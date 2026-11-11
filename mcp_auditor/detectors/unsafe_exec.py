@@ -3,8 +3,9 @@
 Python: AST. Flags eval/exec, os.system/os.popen, subprocess.*(shell=True) and
 create_subprocess_shell whose arguments are not constants. "critical" when a tool
 parameter reaches the call inside a tool handler, "high" when any function parameter
-does, "medium" when the argument is dynamic but its source is unclear, or when exec/eval runs only
-after a check of its input and with __builtins__ replaced (a sandboxed expression evaluator).
+does, "medium" when the argument is dynamic but its source is unclear. When exec/eval runs only
+after a check of its input and with __builtins__ replaced (a sandboxed expression evaluator), the
+severity stays and the message notes the mitigation for the reviewer to confirm.
 JS/TS/Go: regexes for eval, new Function, child_process exec with a non-literal
 command, spawn(..., {shell: true}) and exec.Command("sh", "-c", ...). "critical" when
 the call sits inside a tool handler, "medium" elsewhere (no data-flow trace).
@@ -186,10 +187,10 @@ def _python(f: SourceFile) -> list[Finding]:
         else:
             sev, msg = "medium", f"{name}() {how}is called with a dynamic argument."
         # a sandboxed expression evaluator: the input is checked first and the builtins are swapped out.
-        # Restricted builtins alone are easy to escape, so this lowers the severity instead of dropping it.
+        # Code shape can't show that the check really validates (def check(x): return True passes),
+        # so the severity stays and the message names the check for the reviewer to confirm.
         check = _validator(scope[0], call) if scope and name.rsplit(".", 1)[-1] in ("exec", "eval") and sev != "medium" else None
         if check and _replaces_builtins(call, scope[0]):
-            sev = "medium"
             msg += (f" It runs only after {check}() accepts the input, with __builtins__ replaced; check that "
                     f"{check}() is an allow-list that also rejects dunder attribute access.")
         if (call.lineno, name) not in seen:
