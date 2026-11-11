@@ -254,8 +254,9 @@ jobs:
 ```
 
 Inputs: `path` (default `.`), `fail-on` (default `high`), `pin` (a committed lock file to compare against, optional), `upload-sarif` (default `true`),
-`sarif-file` (default `mcp-audit.sarif`). The action needs `python3` on the runner (present on
-GitHub-hosted Ubuntu and macOS runners).
+`sarif-file` (default `mcp-audit.sarif`). The action installs Python 3.12 for itself with
+`actions/setup-python` (without changing the Python of your other steps), scans once, prints one line per
+finding in the job log and uploads the SARIF report.
 
 ## Development
 

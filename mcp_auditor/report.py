@@ -3,6 +3,7 @@ from __future__ import annotations
 
 import json
 import os
+import posixpath
 import re
 import sys
 import textwrap
@@ -26,6 +27,19 @@ def _where(f: Finding) -> str:
     return "endpoint" if f.rule.id == "MCP007" else "tools/list (live)"
 
 
+def warnings(target: Target, findings: list[Finding]) -> list[str]:
+    """Reasons a "no findings" result may not mean the server is clean."""
+    out = []
+    n = sum(x["files"] for x in target.skipped)
+    if n:
+        out.append(f"{n} code file(s) were NOT scanned, so nothing in them was checked (see the skipped list).")
+    if target.from_source and not target.files:
+        out.append("0 files were scanned, so this result says nothing about the server.")
+    elif not target.tools and not any(f.rule.id == "MCP007" for f in findings):
+        out.append("No MCP tools were found, so the tool checks had nothing to look at. Is this the folder of an MCP server?")
+    return out
+
+
 def to_text(target: Target, findings: list[Finding], color: bool | None = None) -> str:
     if color is None:
         color = sys.stdout.isatty() and "NO_COLOR" not in os.environ
@@ -40,10 +54,16 @@ def to_text(target: Target, findings: list[Finding], color: bool | None = None) 
         if f.evidence:
             out.append(f"         > {CONTROL.sub('?', f.evidence)}")
         out.append("")
-    if not target.tools and not any(f.rule.id == "MCP007" for f in findings):
-        out += ["Note: no MCP tools were found here. Is this the folder of an MCP server?", ""]
+    warned = warnings(target, findings)
+    if warned:
+        out += [paint("high", "WARNING") + " " + w for w in warned]
+        for x in target.skipped:
+            count = " (%d files)" % x["files"] if x["files"] > 1 else ""
+            out.append(f"  not scanned: {CONTROL.sub('?', x['path'])}{count}: {CONTROL.sub('?', x['reason'])}")
+        out.append("")
     if not findings:
-        out.append("No findings. That doesn't prove the server is safe, only that none of the known patterns matched.")
+        out.append("No findings, but this is NOT a clean result: see the warnings above." if warned else
+                   "No findings. That doesn't prove the server is safe, only that none of the known patterns matched.")
         return "\n".join(out)
     seen = {f.rule.id for f in findings}
     out.append("How to fix:")
@@ -59,7 +79,7 @@ def to_text(target: Target, findings: list[Finding], color: bool | None = None) 
 def to_json(target: Target, findings: list[Finding]) -> str:
     return json.dumps({
         "tool": "mcp-audit", "version": __version__, "target": target.label,
-        "files_scanned": len(target.files),
+        "files_scanned": len(target.files), "skipped": target.skipped, "warnings": warnings(target, findings),
         "tools": [{"name": t.name, "file": t.file, "line": t.line, "source": t.source} for t in target.tools],
         "findings": [{"rule_id": f.rule.id, "rule": f.rule.name, "severity": f.severity, "message": f.message,
                       "file": f.file, "line": f.line, "tool": f.tool, "evidence": f.evidence} for f in findings],
@@ -77,7 +97,8 @@ def to_sarif(target: Target, findings: list[Finding], uri_prefix: str = "") -> s
             "properties": {"severity": f.severity, **({"mcpTool": f.tool} if f.tool else {})},
         }
         if f.file:
-            loc = {"artifactLocation": {"uri": (uri_prefix.rstrip("/") + "/" + f.file).lstrip("/")}}
+            # normpath: the pin file of a removed tool can sit outside the scanned folder ("../tools.lock.json")
+            loc = {"artifactLocation": {"uri": posixpath.normpath(uri_prefix.rstrip("/") + "/" + f.file).lstrip("/")}}
             if f.line:
                 loc["region"] = {"startLine": f.line}
             result["locations"] = [{"physicalLocation": loc}]
@@ -89,12 +110,19 @@ def to_sarif(target: Target, findings: list[Finding], uri_prefix: str = "") -> s
         "properties": {"tags": ["security", "mcp"],
                        "security-severity": SECURITY_SEVERITY[_default_severity(r.id)]},
     } for r in RULES]
+    run: dict = {"tool": {"driver": {"name": "mcp-audit", "version": __version__, "informationUri": HOME, "rules": rules}},
+           "results": results}
+    warned = warnings(target, findings)
+    if warned:  # SARIF 2.1.0 notifications: visible to tools that read them, ignored by the rest
+        run["invocations"] = [{"executionSuccessful": True, "toolExecutionNotifications": [
+            {"level": "warning", "message": {"text": w}} for w in warned]}]
+    if target.skipped:
+        run["properties"] = {"skippedFiles": [{**x, "path": (uri_prefix.rstrip("/") + "/" + x["path"]).lstrip("/")}
+                                              for x in target.skipped]}
     return json.dumps({
         "$schema": "https://json.schemastore.org/sarif-2.1.0.json",
         "version": "2.1.0",
-        "runs": [{"tool": {"driver": {"name": "mcp-audit", "version": __version__,
-                                      "informationUri": HOME, "rules": rules}},
-                  "results": results}],
+        "runs": [run],
     }, indent=2, ensure_ascii=False)
 
 
