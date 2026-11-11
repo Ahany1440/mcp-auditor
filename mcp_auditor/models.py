@@ -48,6 +48,7 @@ class Tool:
     source: str = "static"       # "static" or "live"
     extra: list[tuple[str, str]] = field(default_factory=list)  # (where, text): parameter names, titles, enums, defaults...
     raw: dict | None = None      # the full definition as returned by tools/list (live tools only)
+    unresolved: list[str] = field(default_factory=list)  # text the scanner could not work out, e.g. ["description"]
 
 
 def schema_texts(schema, where: str = "input schema") -> list[tuple[str, str]]:

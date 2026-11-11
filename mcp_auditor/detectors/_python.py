@@ -5,14 +5,11 @@ import ast
 from typing import Iterator
 
 from ..models import SourceFile
-from ..source import _is_tool_decorator
+from ..source import _is_tool_decorator, fold_str, parse_python, py_defs
 
 
 def parse(f: SourceFile) -> ast.Module | None:
-    try:
-        return ast.parse(f.text)
-    except SyntaxError:
-        return None
+    return parse_python(f)
 
 
 def dotted(func: ast.expr) -> str:
@@ -21,6 +18,35 @@ def dotted(func: ast.expr) -> str:
         return func.id
     if isinstance(func, ast.Attribute):
         return dotted(func.value) + "." + func.attr
+    return "?"
+
+
+def import_aliases(tree: ast.Module) -> dict[str, str]:
+    """Local name -> real dotted name: `import subprocess as sp` -> sp: subprocess, `from os import system as s` -> s: os.system.
+    shortcut: every scope is read as one, and relative imports are skipped; upgrade if shadowing shows up in practice."""
+    out = {}
+    for node in ast.walk(tree):
+        if isinstance(node, ast.Import):
+            out.update({a.asname: a.name for a in node.names if a.asname})
+        elif isinstance(node, ast.ImportFrom) and node.module and not node.level:
+            out.update({a.asname or a.name: f"{node.module}.{a.name}" for a in node.names if a.name != "*"})
+    return out
+
+
+def resolved(func: ast.expr, aliases: dict[str, str], defs: dict) -> str:
+    """Like dotted(), but through import aliases, `__import__("os")` and `getattr(os, "sys" + "tem")`."""
+    if isinstance(func, ast.Name):
+        return aliases.get(func.id, func.id)
+    if isinstance(func, ast.Attribute):
+        return resolved(func.value, aliases, defs) + "." + func.attr
+    if isinstance(func, ast.Call) and func.args:
+        target = dotted(func.func)
+        if target in ("__import__", "importlib.import_module"):
+            text, known = fold_str(func.args[0], defs)
+            return text if known else "?"
+        if target == "getattr" and len(func.args) >= 2:
+            text, known = fold_str(func.args[1], defs)
+            return resolved(func.args[0], aliases, defs) + "." + text if known else "?"
     return "?"
 
 

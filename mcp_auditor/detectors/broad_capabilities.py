@@ -13,6 +13,7 @@ import re
 
 from ..models import Finding, Rule, SourceFile, Target, Tool
 from . import _python as py
+from ._code import code_view
 
 RULE = Rule("MCP002", "over-broad-capability", "Tool has shell, file or network access without an allow-list",
             "Give the tool only what it needs: a fixed list of commands (no shell), a root directory that "
@@ -29,7 +30,7 @@ CATEGORIES = {
     "filesystem": ("medium", "reads or writes files at a path taken from tool input",
                    r"^(open|io\.open|os\.(remove|unlink|rmdir|rename|listdir|scandir|walk|makedirs)|shutil\.\w+)$|\.(read_text|write_text|read_bytes|write_bytes|unlink|rmdir|iterdir|rglob|glob|open)$",
                    r"\bfs(Promises)?\.(readFile|writeFile|appendFile|unlink|rm|rmdir|readdir|createReadStream|createWriteStream|rename)\w*\(|\b(readFile|writeFile|readdir|unlink)(Sync)?\(|\bos\.(ReadFile|WriteFile|Open|OpenFile|Create|Remove|RemoveAll|ReadDir)\(",
-                   r"allow(ed)?_?(dirs?|directories|paths?|roots?|list)|is_relative_to|commonpath|realpath|\.resolve\(|startswith\(|startsWith\(|path\.relative|ALLOWED_|validatePath|safe_?path|filepath\.Rel|HasPrefix",
+                   r"allow(ed)?_?(dirs?|directories|paths?|roots?|list)|is_relative_to|commonpath|realpath|\.resolve\(|(?:startswith|startsWith)\((?!\s*[\"'](?:[^\"'/\\]*|/)[\"'])|path\.relative|ALLOWED_|validatePath|safe_?path|filepath\.Rel|HasPrefix",
                    r"\b(read|write|delete|edit|move|create|list)s?\b.{0,25}\b(any|arbitrary)?\s*(files?|director(y|ies))\b"),
     "network": ("medium", "makes requests to URLs taken from tool input",
                 r"^(requests|httpx)\.(get|post|put|patch|delete|head|request|stream)$|(^|\.)urlopen$|^aiohttp\.request$",
@@ -39,20 +40,37 @@ CATEGORIES = {
 }
 
 
+def _checks(fn: ast.AST) -> list[ast.AST]:
+    """The parts of a function that can hold a check: conditions, loop heads and plain statements, not whole blocks."""
+    out = []
+    for node in ast.walk(fn):
+        if isinstance(node, (ast.If, ast.While, ast.Assert)):
+            out.append(node.test)
+        elif isinstance(node, (ast.For, ast.AsyncFor)):
+            out.append(node.iter)
+        elif isinstance(node, (ast.With, ast.AsyncWith)):
+            out += [item.context_expr for item in node.items]
+        elif isinstance(node, ast.stmt) and not hasattr(node, "body"):
+            out.append(node)
+    return out
+
+
 def _python(f: SourceFile, target: Target) -> list[Finding]:
     tree = py.parse(f)
     if tree is None:
         return []
+    code = code_view(f)  # no comments, no string contents: a guard word there is not a guard
     findings = []
     for fn in py.functions(tree):
         if not py.is_tool(fn):
             continue
         tool = target.tool_at(f.path, fn.lineno)
         name = tool.name if tool else fn.name
-        body = f.segment(fn) or ""
         tainted = py.tainted_names(fn)
+        checks = [(code.segment(c) or "", py.names_in(c)) for c in _checks(fn)]
         for cat, (sev, what, call_rx, _, guard_rx, _) in CATEGORIES.items():
-            if re.search(guard_rx, body):
+            # a real guard is code that uses the tool's input (or something made from it)
+            if any(re.search(guard_rx, text) and names & tainted for text, names in checks):
                 continue
             for call in (n for n in ast.walk(fn) if isinstance(n, ast.Call)):
                 if re.search(call_rx, py.dotted(call.func)) and py.call_inputs(call) & tainted:
@@ -63,7 +81,7 @@ def _python(f: SourceFile, target: Target) -> list[Finding]:
 
 
 def _windowed(f: SourceFile, tool: Tool) -> list[Finding]:
-    lines = f.lines[tool.line - 1: tool.end_line]
+    lines = code_view(f).lines[tool.line - 1: tool.end_line]
     body = "\n".join(lines)
     findings = []
     for cat, (sev, what, _, text_rx, guard_rx, _) in CATEGORIES.items():
