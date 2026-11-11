@@ -13,7 +13,7 @@ import subprocess
 import tempfile
 from pathlib import Path
 
-from .models import SourceFile, Target, Tool, schema_texts
+from .models import CODE_SUFFIXES, SourceFile, Target, Tool, schema_texts
 
 SCAN_SUFFIXES = {".py", ".js", ".mjs", ".cjs", ".ts", ".mts", ".cts", ".tsx", ".jsx", ".go",
                  ".json", ".yaml", ".yml", ".toml", ".env", ".ini", ".cfg"}
@@ -29,23 +29,53 @@ GITHUB_URL = re.compile(r"^https://github\.com/([\w.-]+)/([\w.-]+?)(?:\.git)?(?:
 
 # ---------------------------------------------------------------- loading
 
-def load_files(root: Path) -> list[SourceFile]:
+def _count_code(folder: Path) -> int:
+    return sum(Path(n).suffix.lower() in CODE_SUFFIXES for _, _, names in os.walk(folder) for n in names)
+
+
+def load_files(root: Path, skipped: list[dict] | None = None) -> list[SourceFile]:
+    """Read the scannable files. Everything code-like that is left out is appended to `skipped`
+    (a folder counts as one entry with the number of code files inside), so a scan never hides it."""
+    skipped = [] if skipped is None else skipped
     files = []
     for dirpath, dirnames, filenames in os.walk(root):
-        dirnames[:] = sorted(d for d in dirnames if d not in SKIP_DIRS and d.lower() not in TEST_DIRS)
+        keep = []
+        for d in sorted(dirnames):
+            if d in SKIP_DIRS or d.lower() in TEST_DIRS:
+                n = _count_code(Path(dirpath, d))
+                if n:
+                    skipped.append({"path": Path(dirpath, d).relative_to(root).as_posix() + "/", "files": n,
+                                    "reason": "test folder" if d.lower() in TEST_DIRS else "dependency or build folder"})
+            else:
+                keep.append(d)
+        dirnames[:] = keep
         for name in sorted(filenames):
             p = Path(dirpath, name)
-            if name in SKIP_FILES or TEST_FILE.search(name):
+            rel = p.relative_to(root).as_posix()
+            is_code = p.suffix.lower() in CODE_SUFFIXES
+
+            def skip(reason: str) -> None:
+                skipped.append({"path": rel, "files": 1, "reason": reason})
+            if name in SKIP_FILES:
+                continue
+            if TEST_FILE.search(name):
+                if is_code:
+                    skip("test file")
                 continue
             if p.suffix.lower() not in SCAN_SUFFIXES and not name.startswith(".env"):
                 continue
-            if name.endswith((".min.js", ".d.ts")) or p.stat().st_size > MAX_BYTES:
+            if is_code and name.endswith((".min.js", ".d.ts")):
+                skip("minified file" if name.endswith(".min.js") else "type declarations")
                 continue
             try:
-                text = p.read_text(encoding="utf-8")
-            except (UnicodeDecodeError, OSError):
+                if p.stat().st_size > MAX_BYTES:
+                    skip(f"larger than {MAX_BYTES // 1_000_000} MB")
+                    continue
+                text = p.read_text(encoding="utf-8", errors="replace")  # one bad byte must not drop the file
+            except OSError as e:
+                skip(f"unreadable ({e.strerror or 'I/O error'})")
                 continue
-            files.append(SourceFile(p.relative_to(root).as_posix(), text))
+            files.append(SourceFile(rel, text))
     return files
 
 
@@ -67,7 +97,8 @@ def clone_github(url: str, into: str) -> Path:
 
 
 def load_target(label: str, root: Path) -> Target:
-    files = load_files(root)
+    skipped: list[dict] = []
+    files = load_files(root, skipped)
     tools = []
     for f in files:
         if f.is_python:
@@ -76,7 +107,7 @@ def load_target(label: str, root: Path) -> Target:
             tools += js_tools(f)
         elif f.suffix == ".go":
             tools += go_tools(f)
-    return Target(label, files, tools)
+    return Target(label, files, tools, skipped, True)
 
 
 def open_target(path_or_url: str, workdir: str | None = None) -> tuple[Target, Path]:
@@ -94,9 +125,9 @@ def open_target(path_or_url: str, workdir: str | None = None) -> tuple[Target, P
 
 
 def load_target_single(label: str, path: Path) -> Target:
-    sf = SourceFile(path.name, path.read_text(encoding="utf-8"))
+    sf = SourceFile(path.name, path.read_text(encoding="utf-8", errors="replace"))
     tools = python_tools(sf) if sf.is_python else go_tools(sf) if sf.suffix == ".go" else js_tools(sf)
-    return Target(label, [sf], tools)
+    return Target(label, [sf], tools, from_source=True)
 
 
 # ---------------------------------------------------------------- Python
