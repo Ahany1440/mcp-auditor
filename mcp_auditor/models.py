@@ -1,7 +1,11 @@
 """Plain data types shared by the loader, the detectors and the reporters."""
 from __future__ import annotations
 
+import re
+from bisect import bisect_left
 from dataclasses import dataclass, field
+from functools import cached_property
+from itertools import accumulate
 from pathlib import PurePosixPath
 
 SEVERITIES = ["low", "medium", "high", "critical"]  # ordered, lowest first
@@ -91,12 +95,39 @@ class SourceFile:
     def is_python(self) -> bool:
         return self.suffix == ".py"
 
+    # Line tables are built once per file: detectors ask for a line number or line text once per tool, and
+    # re-counting or re-splitting the whole file each time made big files take quadratic time.
+    @cached_property
+    def _newlines(self) -> list[int]:
+        return [m.start() for m in re.finditer(r"\n", self.text)]
+
+    @cached_property
+    def lines(self) -> list[str]:
+        return self.text.splitlines()
+
+    @cached_property
+    def line_ends(self) -> list[int]:
+        """line_ends[k] is the offset where line k+1 starts, by splitlines() rules (which can differ from newline counting)."""
+        return [0, *accumulate(len(l) for l in self.text.splitlines(True))]
+
     def line_of(self, offset: int) -> int:
-        return self.text.count("\n", 0, offset) + 1
+        return bisect_left(self._newlines, offset) + 1
 
     def line_text(self, line: int) -> str:
-        lines = self.text.splitlines()
-        return lines[line - 1].strip() if 0 < line <= len(lines) else ""
+        return self.lines[line - 1].strip() if 0 < line <= len(self.lines) else ""
+
+    @cached_property
+    def _ast_lines(self) -> list[str]:
+        return re.findall(r"[^\r\n]*(?:\r\n|[\r\n])|[^\r\n]+", self.text)  # how ast splits source: not on form feeds
+
+    def segment(self, node) -> str | None:
+        """ast.get_source_segment(self.text, node), without re-splitting the whole file for every node."""
+        if getattr(node, "end_lineno", None) is None or getattr(node, "end_col_offset", None) is None:
+            return None
+        lines, a, b = self._ast_lines, node.lineno - 1, node.end_lineno - 1
+        if a == b:
+            return lines[a].encode()[node.col_offset:node.end_col_offset].decode()
+        return lines[a].encode()[node.col_offset:].decode() + "".join(lines[a + 1:b]) + lines[b].encode()[:node.end_col_offset].decode()
 
 
 @dataclass
