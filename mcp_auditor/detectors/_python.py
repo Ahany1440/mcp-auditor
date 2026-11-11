@@ -5,14 +5,11 @@ import ast
 from typing import Iterator
 
 from ..models import SourceFile
-from ..source import _is_tool_decorator, fold_str, py_defs
+from ..source import _is_tool_decorator, fold_str, parse_python, py_defs
 
 
 def parse(f: SourceFile) -> ast.Module | None:
-    try:
-        return ast.parse(f.text)
-    except SyntaxError:
-        return None
+    return parse_python(f)
 
 
 def dotted(func: ast.expr) -> str:

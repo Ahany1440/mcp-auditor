@@ -96,6 +96,27 @@ def clone_github(url: str, into: str) -> Path:
     return root
 
 
+def parse_python(f: SourceFile) -> ast.Module | None:
+    """The syntax tree of a Python file, parsed once and shared by every detector; None if it cannot be parsed."""
+    cache = f.__dict__
+    if "_tree" not in cache:
+        cache["_tree"], cache["_parse_error"] = None, None
+        try:
+            cache["_tree"] = ast.parse(f.text)
+        except SyntaxError:
+            cache["_parse_error"] = "syntax error"
+        except (ValueError, RecursionError, MemoryError):
+            cache["_parse_error"] = "could not be parsed"
+    return cache["_tree"]
+
+
+def _unparsed(f: SourceFile) -> list[dict]:
+    """A skipped-files entry for a Python file that does not parse: its tools and code checks are lost."""
+    parse_python(f)
+    error = f.__dict__["_parse_error"]
+    return [{"path": f.path, "files": 1, "reason": f"{error} (tools and code checks skipped; secrets and text checks still ran)"}] if error else []
+
+
 def load_target(label: str, root: Path) -> Target:
     skipped: list[dict] = []
     files = load_files(root, skipped)
@@ -103,6 +124,7 @@ def load_target(label: str, root: Path) -> Target:
     for f in files:
         if f.is_python:
             tools += python_tools(f)
+            skipped += _unparsed(f)
         elif f.suffix in {".js", ".mjs", ".cjs", ".ts", ".mts", ".cts", ".tsx", ".jsx"}:
             tools += js_tools(f)
         elif f.suffix == ".go":
@@ -127,7 +149,7 @@ def open_target(path_or_url: str, workdir: str | None = None) -> tuple[Target, P
 def load_target_single(label: str, path: Path) -> Target:
     sf = SourceFile(path.name, path.read_text(encoding="utf-8", errors="replace"))
     tools = python_tools(sf) if sf.is_python else go_tools(sf) if sf.suffix == ".go" else js_tools(sf)
-    return Target(label, [sf], tools, from_source=True)
+    return Target(label, [sf], tools, _unparsed(sf) if sf.is_python else [], True)
 
 
 # ---------------------------------------------------------------- Python
@@ -259,9 +281,8 @@ def _field_strings(node: ast.AST | None, defs: dict) -> list[tuple[str, str]]:
 
 
 def python_tools(f: SourceFile) -> list[Tool]:
-    try:
-        tree = ast.parse(f.text)
-    except SyntaxError:
+    tree = parse_python(f)
+    if tree is None:
         return []
     defs = py_defs(tree)
     tools = []
