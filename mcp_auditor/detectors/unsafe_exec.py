@@ -13,7 +13,10 @@ from __future__ import annotations
 import ast
 import re
 
+from bisect import bisect_left
+
 from ..models import Finding, Rule, SourceFile, Target
+from ..source import py_defs
 from . import _python as py
 
 RULE = Rule("MCP004", "unsafe-execution", "Code or shell execution with dynamic input",
@@ -21,8 +24,15 @@ RULE = Rule("MCP004", "unsafe-execution", "Code or shell execution with dynamic 
             "(shell=False / execFile), validate input against an allow-list, and use a real parser instead of "
             "eval for expressions.")
 
-PY_ALWAYS = re.compile(r"^(eval|exec|os\.system|os\.popen|subprocess\.getoutput|subprocess\.getstatusoutput|asyncio\.create_subprocess_shell|commands\.getoutput)$")
-PY_SHELL_KW = re.compile(r"^subprocess\.(run|call|check_call|check_output|Popen)$")
+# The dangerous calls. Python names are matched after import aliases are resolved (`import subprocess as sp`).
+PY_ALWAYS = re.compile(r"^((__builtins__|builtins)\.)?(eval|exec)$|^(os\.system|os\.popen|subprocess\.getoutput|subprocess\.getstatusoutput|asyncio\.create_subprocess_shell|commands\.getoutput)$")
+PY_SHELL_KW = re.compile(r"^subprocess\.(run|call|check_call|check_output|Popen)$")  # a sink with shell=True or a `sh -c` list
+PY_DESERIALIZE = re.compile(r"^(pickle|_pickle|cPickle|cloudpickle|dill|marshal)\.loads?$|^jsonpickle\.decode$|^yaml\.unsafe_load(_all)?$")
+PY_YAML_LOAD = re.compile(r"^yaml\.load(_all)?$")  # a sink unless it is given a safe Loader
+YAML_UNSAFE_LOADERS = {"Loader", "UnsafeLoader", "FullLoader", "CLoader", "CUnsafeLoader", "CFullLoader"}
+SHELL_PROGRAM = re.compile(r"(?i)^(.*[/\\])?(sh|bash|zsh|dash|ksh|cmd|powershell|pwsh)(\.exe)?$")
+SHELL_FLAG = re.compile(r"(?i)^(-[a-z]*c|/c|-command)$")
+JS_MODULES = "child_process|vm"
 
 JS_PATTERNS = [
     (r"(?<![.\w$\"'`])eval\(\s*(?![\"'`][^\"'`$]*[\"'`]\s*\))", "eval() on a dynamic string"),
@@ -37,19 +47,42 @@ JS_PATTERNS = [
 JS_PATTERNS = [(re.compile(rx), why) for rx, why in JS_PATTERNS]
 
 
+def _py_sink(call: ast.Call, name: str, shell_kw: bool) -> str | None:
+    """None when the call is not one of the dangerous ones; else the phrase for the message ("" if its name says it all)."""
+    if PY_ALWAYS.match(name):
+        return "with shell=True " if shell_kw else ""
+    if PY_SHELL_KW.match(name):
+        first = call.args[0] if call.args else None
+        if shell_kw:
+            return "with shell=True "
+        if (isinstance(first, (ast.List, ast.Tuple)) and len(first.elts) > 2
+                and all(isinstance(e, ast.Constant) and isinstance(e.value, str) for e in first.elts[:2])
+                and SHELL_PROGRAM.match(first.elts[0].value) and SHELL_FLAG.match(first.elts[1].value)):
+            return "running a shell with -c "
+    if PY_DESERIALIZE.match(name):
+        return "(can run code while loading) "
+    if PY_YAML_LOAD.match(name):
+        loader = call.args[1] if len(call.args) > 1 else next((k.value for k in call.keywords if k.arg == "Loader"), None)
+        if loader is None or py.dotted(loader).split(".")[-1] in YAML_UNSAFE_LOADERS:
+            return "(can run code while loading) "
+    return None
+
+
 def _python(f: SourceFile) -> list[Finding]:
     tree = py.parse(f)
     if tree is None:
         return []
+    aliases, defs = py.import_aliases(tree), py_defs(tree)
     findings, seen = [], set()
     scopes = [(fn, py.tainted_names(fn), py.is_tool(fn)) for fn in py.functions(tree)]
     # innermost function first so a call is judged by its own handler
     scopes.sort(key=lambda s: s[0].end_lineno - s[0].lineno)
     for call in (n for n in ast.walk(tree) if isinstance(n, ast.Call)):
-        name = py.dotted(call.func)
+        name = py.resolved(call.func, aliases, defs)
         shell_kw = any(kw.arg == "shell" and isinstance(kw.value, ast.Constant) and kw.value.value is True
                        for kw in call.keywords)
-        if not (PY_ALWAYS.match(name) or (PY_SHELL_KW.match(name) and shell_kw)):
+        how = _py_sink(call, name, shell_kw)
+        if how is None:
             continue
         args = call.args[:1] or [kw.value for kw in call.keywords if kw.arg in ("args", "cmd", "source")]
         if not args or all(py.is_literal(a) for a in args):
@@ -59,9 +92,9 @@ def _python(f: SourceFile) -> list[Finding]:
         if scope and used & scope[1]:
             sev = "critical" if scope[2] else "high"
             who = f"tool parameter(s) {sorted(used & scope[1])}" if scope[2] else f"parameter(s) {sorted(used & scope[1])} of {scope[0].name}()"
-            msg = f"{name}() {'with shell=True ' if shell_kw else ''}receives input from {who}."
+            msg = f"{name}() {how}receives input from {who}."
         else:
-            sev, msg = "medium", f"{name}() {'with shell=True ' if shell_kw else ''}is called with a dynamic argument."
+            sev, msg = "medium", f"{name}() {how}is called with a dynamic argument."
         if (call.lineno, name) not in seen:
             seen.add((call.lineno, name))
             findings.append(Finding(RULE, sev, msg, f.path, call.lineno,
@@ -69,13 +102,54 @@ def _python(f: SourceFile) -> list[Finding]:
     return findings
 
 
+def _js_aliases(text: str) -> dict[str, str]:
+    """Local name -> "child_process", "child_process.exec", "vm.runInNewContext"... from require() and import."""
+    out = {"cp": "child_process", "childProcess": "child_process"}
+    require = r"""require\(\s*["'](?:node:)?(""" + JS_MODULES + r""")["']\s*\)"""
+    for m in re.finditer(r"(?:const|let|var)\s+([\w$]+)\s*=\s*" + require + r"(?:\.([\w$]+))?", text):
+        out[m.group(1)] = m.group(2) + ("." + m.group(3) if m.group(3) else "")
+    for m in re.finditer(r"(?:const|let|var)\s*\{([^}]*)\}\s*=\s*" + require, text):
+        for item in m.group(1).split(","):  # `exec: run` or just `exec`
+            real, _, local = item.partition(":")
+            if real.strip():
+                out[local.strip() or real.strip()] = m.group(2) + "." + real.strip()
+    for m in re.finditer(r"""\bimport\s+([^;'"]*?)\s*from\s*["'](?:node:)?(""" + JS_MODULES + r""")["']""", text):
+        clause, module = m.group(1), m.group(2)
+        for item in re.findall(r"\{([^}]*)\}", clause):  # `{ exec as run, execSync }`
+            for part in item.split(","):
+                real, _, local = part.partition(" as ")
+                if real.strip():
+                    out[local.strip() or real.strip()] = module + "." + real.strip()
+        for local in re.findall(r"(?:\*\s*as\s+)?([\w$]+)\s*(?:,|$)", re.sub(r"\{[^}]*\}", "", clause)):
+            out[local] = module
+    return out
+
+
+def _canonical_js(text: str) -> str:
+    """The same text with the other spellings of a dangerous call turned into the plain ones the patterns look for:
+    `require("child_process").execSync(x)`, `cp2.exec(x)` / `run(x)` through an alias, `cp["exec"](x)`,
+    `globalThis.eval(x)` and `(0, eval)(x)`. Newlines are never touched, so line numbers stay the same."""
+    aliases = _js_aliases(text)
+    text = re.sub(r"""require\([ \t]*["'](?:node:)?(""" + JS_MODULES + r""")["'][ \t]*\)""", r"\1", text)
+    for local, real in aliases.items():
+        if "." in real:  # `run(x)` is child_process.exec(x)
+            text = re.sub(rf"(?<![\w$.])(?<!function ){re.escape(local)}(?=[ \t]*\()", real, text)
+        else:  # `cp2.exec(x)` and `cp2["exec"](x)`
+            text = re.sub(rf"(?<![\w$.]){re.escape(local)}(?=[ \t]*[.\[])", real, text)
+    text = re.sub(r"""\b(""" + JS_MODULES + r""")[ \t]*\[[ \t]*["'](\w+)["'][ \t]*\]""", r"\1.\2", text)
+    text = re.sub(r"\([ \t]*0[ \t]*,[ \t]*(?:(?:globalThis|window|global|self)[ \t]*\.[ \t]*)?eval[ \t]*\)(?=[ \t]*\()", "eval", text)
+    return re.sub(r"(?<![\w$.])(?:globalThis|window|global|self)[ \t]*\.[ \t]*eval(?=[ \t]*\()", "eval", text)
+
+
 def _text(f: SourceFile, target: Target) -> list[Finding]:
     findings = []
+    text = f.text if f.suffix == ".go" else _canonical_js(f.text)
+    newlines = [m.start() for m in re.finditer("\\n", text)]
     for rx, why in JS_PATTERNS:
-        if "child_process" in why and "child_process" not in f.text:
+        if "child_process" in why and "child_process" not in text:
             continue  # avoids regex.exec(...) and similar look-alikes
-        for m in rx.finditer(f.text):
-            line = f.line_of(m.start())
+        for m in rx.finditer(text):
+            line = bisect_left(newlines, m.start()) + 1
             tool = target.tool_at(f.path, line)
             # without a data-flow trace we only know tool input can reach it when it sits inside a tool handler
             findings.append(Finding(RULE, "critical" if tool else "medium",

@@ -352,6 +352,276 @@
    [
     "MCP004",
     "critical",
+    "child_process exec() with a command built from variables (runs through a shell) inside tool 'reg_0'.",
+    "a.js",
+    7,
+    "reg_0",
+    "require(\"child_process\").exec(`ls ${q}`);"
+   ],
+   [
+    "MCP004",
+    "critical",
+    "child_process exec() with a command built from variables (runs through a shell) inside tool 'reg_1'.",
+    "a.js",
+    17,
+    "reg_1",
+    "require(\"child_process\").exec(`ls ${q}`);"
+   ],
+   [
+    "MCP004",
+    "critical",
+    "child_process exec() with a command built from variables (runs through a shell) inside tool 'reg_2'.",
+    "a.js",
+    27,
+    "reg_2",
+    "require(\"child_process\").exec(`ls ${q}`);"
+   ],
+   [
+    "MCP004",
+    "critical",
+    "child_process exec() with a command built from variables (runs through a shell) inside tool 'reg_3'.",
+    "a.js",
+    37,
+    "reg_3",
+    "require(\"child_process\").exec(`ls ${q}`);"
+   ],
+   [
+    "MCP004",
+    "critical",
+    "child_process exec() with a command built from variables (runs through a shell) inside tool 'reg_4'.",
+    "a.js",
+    47,
+    "reg_4",
+    "require(\"child_process\").exec(`ls ${q}`);"
+   ],
+   [
+    "MCP004",
+    "critical",
+    "child_process exec() with a command built from variables (runs through a shell) inside tool 'reg_5'.",
+    "a.js",
+    57,
+    "reg_5",
+    "require(\"child_process\").exec(`ls ${q}`);"
+   ],
+   [
+    "MCP004",
+    "critical",
+    "child_process exec() with a command built from variables (runs through a shell) inside tool 'reg_6'.",
+    "a.js",
+    67,
+    "reg_6",
+    "require(\"child_process\").exec(`ls ${q}`);"
+   ],
+   [
+    "MCP004",
+    "critical",
+    "child_process exec() with a command built from variables (runs through a shell) inside tool 'reg_7'.",
+    "a.js",
+    77,
+    "reg_7",
+    "require(\"child_process\").exec(`ls ${q}`);"
+   ],
+   [
+    "MCP004",
+    "critical",
+    "child_process exec() with a command built from variables (runs through a shell) inside tool 'reg_8'.",
+    "a.js",
+    87,
+    "reg_8",
+    "require(\"child_process\").exec(`ls ${q}`);"
+   ],
+   [
+    "MCP004",
+    "critical",
+    "child_process exec() with a command built from variables (runs through a shell) inside tool 'reg_9'.",
+    "a.js",
+    97,
+    "reg_9",
+    "require(\"child_process\").exec(`ls ${q}`);"
+   ],
+   [
+    "MCP004",
+    "critical",
+    "child_process exec() with a command built from variables (runs through a shell) inside tool 'reg_10'.",
+    "a.js",
+    107,
+    "reg_10",
+    "require(\"child_process\").exec(`ls ${q}`);"
+   ],
+   [
+    "MCP004",
+    "critical",
+    "child_process exec() with a command built from variables (runs through a shell) inside tool 'reg_11'.",
+    "a.js",
+    117,
+    "reg_11",
+    "require(\"child_process\").exec(`ls ${q}`);"
+   ],
+   [
+    "MCP004",
+    "critical",
+    "child_process exec() with a command built from variables (runs through a shell) inside tool 'reg_12'.",
+    "a.js",
+    127,
+    "reg_12",
+    "require(\"child_process\").exec(`ls ${q}`);"
+   ],
+   [
+    "MCP004",
+    "critical",
+    "child_process exec() with a command built from variables (runs through a shell) inside tool 'reg_13'.",
+    "a.js",
+    137,
+    "reg_13",
+    "require(\"child_process\").exec(`ls ${q}`);"
+   ],
+   [
+    "MCP004",
+    "critical",
+    "child_process exec() with a command built from variables (runs through a shell) inside tool 'reg_14'.",
+    "a.js",
+    147,
+    "reg_14",
+    "require(\"child_process\").exec(`ls ${q}`);"
+   ],
+   [
+    "MCP004",
+    "critical",
+    "child_process exec() with a command built from variables (runs through a shell) inside tool 'reg_15'.",
+    "a.js",
+    157,
+    "reg_15",
+    "require(\"child_process\").exec(`ls ${q}`);"
+   ],
+   [
+    "MCP004",
+    "critical",
+    "child_process exec() with a command built from variables (runs through a shell) inside tool 'reg_16'.",
+    "a.js",
+    167,
+    "reg_16",
+    "require(\"child_process\").exec(`ls ${q}`);"
+   ],
+   [
+    "MCP004",
+    "critical",
+    "child_process exec() with a command built from variables (runs through a shell) inside tool 'reg_17'.",
+    "a.js",
+    177,
+    "reg_17",
+    "require(\"child_process\").exec(`ls ${q}`);"
+   ],
+   [
+    "MCP004",
+    "critical",
+    "child_process exec() with a command built from variables (runs through a shell) inside tool 'reg_18'.",
+    "a.js",
+    187,
+    "reg_18",
+    "require(\"child_process\").exec(`ls ${q}`);"
+   ],
+   [
+    "MCP004",
+    "critical",
+    "child_process exec() with a command built from variables (runs through a shell) inside tool 'reg_19'.",
+    "a.js",
+    197,
+    "reg_19",
+    "require(\"child_process\").exec(`ls ${q}`);"
+   ],
+   [
+    "MCP004",
+    "critical",
+    "child_process exec() with a command built from variables (runs through a shell) inside tool 'reg_20'.",
+    "a.js",
+    207,
+    "reg_20",
+    "require(\"child_process\").exec(`ls ${q}`);"
+   ],
+   [
+    "MCP004",
+    "critical",
+    "child_process exec() with a command built from variables (runs through a shell) inside tool 'reg_21'.",
+    "a.js",
+    217,
+    "reg_21",
+    "require(\"child_process\").exec(`ls ${q}`);"
+   ],
+   [
+    "MCP004",
+    "critical",
+    "child_process exec() with a command built from variables (runs through a shell) inside tool 'reg_22'.",
+    "a.js",
+    227,
+    "reg_22",
+    "require(\"child_process\").exec(`ls ${q}`);"
+   ],
+   [
+    "MCP004",
+    "critical",
+    "child_process exec() with a command built from variables (runs through a shell) inside tool 'reg_23'.",
+    "a.js",
+    237,
+    "reg_23",
+    "require(\"child_process\").exec(`ls ${q}`);"
+   ],
+   [
+    "MCP004",
+    "critical",
+    "child_process exec() with a command built from variables (runs through a shell) inside tool 'reg_24'.",
+    "a.js",
+    247,
+    "reg_24",
+    "require(\"child_process\").exec(`ls ${q}`);"
+   ],
+   [
+    "MCP004",
+    "critical",
+    "child_process exec() with a command built from variables (runs through a shell) inside tool 'reg_0'.",
+    "b.js",
+    7,
+    "reg_0",
+    "});"
+   ],
+   [
+    "MCP004",
+    "critical",
+    "child_process exec() with a command built from variables (runs through a shell) inside tool 'reg_1'.",
+    "b.js",
+    17,
+    "reg_1",
+    "const data = await fs.promises.readFile(id);"
+   ],
+   [
+    "MCP004",
+    "critical",
+    "child_process exec() with a command built from variables (runs through a shell) inside tool 'reg_2'.",
+    "b.js",
+    27,
+    "reg_2",
+    "{ id: z.string().describe(\"the id\") }, async ("
+   ],
+   [
+    "MCP004",
+    "critical",
+    "child_process exec() with a command built from variables (runs through a shell) inside tool 'reg_3'.",
+    "b.js",
+    37,
+    "reg_3",
+    ""
+   ],
+   [
+    "MCP004",
+    "critical",
+    "child_process exec() with a command built from variables (runs through a shell) inside tool 'reg_4'.",
+    "b.js",
+    47,
+    "reg_4",
+    "server.tool(\"dyn_3\", `Dynamic ${process.env.X} 3`, {}, async () => fetch(url));"
+   ],
+   [
+    "MCP004",
+    "critical",
     "exec.Command runs a shell with -c inside tool 'go_tool_0'.",
     "c.go",
     5,
