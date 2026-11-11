@@ -10,6 +10,7 @@ from __future__ import annotations
 import re
 
 from ..models import Finding, Rule, Target
+from ._code import code_view
 
 RULE = Rule("MCP005", "missing-auth", "HTTP/SSE transport without authentication",
             "Require a credential on every request (the MCP authorization spec uses OAuth 2.1 bearer tokens; "
@@ -34,18 +35,20 @@ ALL_INTERFACES =re.compile(r"""["']0\.0\.0\.0["']|["']::["']|host\s*[=:]\s*["'][
 
 def detect(target: Target) -> list[Finding]:
     code = [f for f in target.files if f.is_code]
-    if any(INBOUND_AUTH.search(f.text) for f in code):
+    # guard words only count in real code: not in a comment, a docstring or a string (code_view blanks those)
+    if any(INBOUND_AUTH.search(code_view(f).text) for f in code):
         return []
     findings = []
     for f in code:
+        plain = code_view(f, keep_strings=True)  # comments blanked, strings kept: `transport="sse"` is a string
         # point at where the transport is used, not where it is imported
-        lines = [f.line_of(m.start()) for m in TRANSPORT.finditer(f.text)]
+        lines = [f.line_of(m.start()) for m in TRANSPORT.finditer(plain.text)]
         used = [n for n in lines if not re.match(r"(import|from)\b", f.line_text(n))]
         line = next((n for n in used if re.search(r"(Transport|_app|Server)\(|\.run\(", f.line_text(n))), used[0] if used else None)
         if line is None:
             continue
-        exposed = bool(ALL_INTERFACES.search(f.text))
-        origin_checked = any(ORIGIN_CHECK.search(c.text) for c in code)
+        exposed = bool(ALL_INTERFACES.search(plain.text))
+        origin_checked = any(ORIGIN_CHECK.search(code_view(c).text) for c in code)
         sev = "critical" if exposed else "medium" if origin_checked else "high"
         findings.append(Finding(
             RULE, sev,
