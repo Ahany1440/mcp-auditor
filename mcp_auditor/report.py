@@ -3,6 +3,7 @@ from __future__ import annotations
 
 import json
 import os
+import posixpath
 import re
 import sys
 import textwrap
@@ -96,7 +97,8 @@ def to_sarif(target: Target, findings: list[Finding], uri_prefix: str = "") -> s
             "properties": {"severity": f.severity, **({"mcpTool": f.tool} if f.tool else {})},
         }
         if f.file:
-            loc = {"artifactLocation": {"uri": (uri_prefix.rstrip("/") + "/" + f.file).lstrip("/")}}
+            # normpath: the pin file of a removed tool can sit outside the scanned folder ("../tools.lock.json")
+            loc = {"artifactLocation": {"uri": posixpath.normpath(uri_prefix.rstrip("/") + "/" + f.file).lstrip("/")}}
             if f.line:
                 loc["region"] = {"startLine": f.line}
             result["locations"] = [{"physicalLocation": loc}]
