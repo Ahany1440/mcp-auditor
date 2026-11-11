@@ -225,6 +225,7 @@ def python_tools(f: SourceFile) -> list[Tool]:
 _STR = r"""(?:"((?:\\.|[^"\\])*)"|'((?:\\.|[^'\\])*)'|`((?:\\.|[^`\\])*)`)"""  # one string literal, 3 groups
 JS_TOOL_CALL = re.compile(r"\.(?:tool|registerTool|addTool)\(\s*" + _STR, re.S)
 JS_TOOL_OBJ = re.compile(r"\bname\s*:\s*" + _STR + r"\s*,\s*(?:title\s*:\s*" + _STR + r"\s*,\s*)?description\s*:\s*" + _STR, re.S)
+JS_SECOND_STR = re.compile(r"\s*,\s*" + _STR, re.S)  # the description argument right after a tool name
 JS_DESC = re.compile(r"(?:\bdescription\s*:\s*|\.describe\(\s*)" + _STR, re.S)
 # mark3labs/mcp-go: mcp.NewTool("name", mcp.WithDescription("..."))
 # official go-sdk:  mcp.Tool{Name: "name", Description: "..."}  (or Description: t("KEY", "default text"))
@@ -252,7 +253,8 @@ def _windowed(f: SourceFile, hits: list[tuple[int, str]], desc_re: re.Pattern, f
     for i, (start, name) in enumerate(hits):
         end = hits[i + 1][0] if i + 1 < len(hits) else len(f.text)
         line = f.line_of(start)
-        end = min(end, sum(len(l) for l in f.text.splitlines(True)[: line - 1 + WINDOW_LINES]))
+        ends = f.line_ends
+        end = min(end, ends[min(line - 1 + WINDOW_LINES, len(ends) - 1)])
         descs = [_first(m.groups()) for m in desc_re.finditer(f.text, start, max(end, start))]
         desc = descs.pop(0) if descs and first_desc_is_tool else ""
         names = [("parameter name", n) for n in JS_PARAM_NAME.findall(f.text, start, max(end, start))] if desc_re is JS_DESC else []
@@ -266,11 +268,13 @@ def js_tools(f: SourceFile) -> list[Tool]:
     # `.tool("name", "description", ...)`: the description is the next string argument.
     call_tools = []
     for m in JS_TOOL_CALL.finditer(f.text):
-        rest = f.text[m.end():]
-        dm = re.match(r"\s*,\s*" + _STR, rest, re.S)
+        dm = JS_SECOND_STR.match(f.text, m.end())
         call_tools.append((m.start(), _first(m.groups()), _first(dm.groups()) if dm else None))
+    own_desc: dict[tuple[int, str], str | None] = {}
+    for s, n, d in call_tools:
+        own_desc.setdefault((f.line_of(s), n), d)
     for t in _windowed(f, [(s, n) for s, n, _ in call_tools], JS_DESC, False):
-        own = next(d for s, n, d in call_tools if f.line_of(s) == t.line and n == t.name)
+        own = own_desc[(t.line, t.name)]
         if own is not None:
             t.description = own
         else:  # registerTool("name", { description: "..." }) style
