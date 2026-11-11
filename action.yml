@@ -4,7 +4,6 @@ author: Nex
 branding:
   icon: shield
   color: red
-
 inputs:
   path:
     description: Folder (relative to the repository root) to scan.
@@ -21,15 +20,19 @@ inputs:
   sarif-file:
     description: Where to write the SARIF report.
     default: mcp-audit.sarif
-
 outputs:
   exit-code:
     description: 0 = nothing at or above fail-on, 1 = findings at or above fail-on, 2 = scan error.
     value: ${{ steps.scan.outputs.exit-code }}
-
 runs:
   using: composite
   steps:
+    # mcp-audit needs Python 3.10+. update-environment: false keeps this Python away from the rest of the caller's job.
+    - id: python
+      uses: actions/setup-python@v7
+      with:
+        python-version: "3.12"
+        update-environment: false
     - id: scan
       shell: bash
       # inputs go through env vars, never straight into the script, so they can't inject shell code
@@ -38,6 +41,7 @@ runs:
         FAIL_ON: ${{ inputs.fail-on }}
         SARIF_FILE: ${{ inputs.sarif-file }}
         PIN: ${{ inputs.pin }}
+        PYTHON: ${{ steps.python.outputs.python-path }}
         PYTHONPATH: ${{ github.action_path }}
       run: |
         set +e
@@ -46,16 +50,30 @@ runs:
           [ -f "$PIN" ] || { echo "pin file $PIN not found; create it locally with mcp-audit --pin and commit it"; exit 2; }
           pin_args=(--pin "$PIN")
         fi
-        python3 -m mcp_auditor "$SCAN_PATH" --fail-on "$FAIL_ON" "${pin_args[@]}"
-        python3 -m mcp_auditor "$SCAN_PATH" --format sarif --output "$SARIF_FILE" --fail-on "$FAIL_ON" "${pin_args[@]}"
-        echo "exit-code=$?" >> "$GITHUB_OUTPUT"
-
+        # one scan: the SARIF file is the report, and the log below is printed from it
+        "$PYTHON" -m mcp_auditor "$SCAN_PATH" --format sarif --output "$SARIF_FILE" --fail-on "$FAIL_ON" "${pin_args[@]}"
+        code=$?
+        echo "exit-code=$code" >> "$GITHUB_OUTPUT"
+        if [ "$code" != 2 ]; then
+          # finding text comes from the scanned code: strip control characters so it can't forge workflow commands
+          "$PYTHON" - "$SARIF_FILE" <<'PY'
+        import json, re, sys
+        clean = re.compile("[\\x00-\\x1f\\x7f-\\x9f\\u2028\\u2029\\u202a-\\u202e\\u2066-\\u2069]")
+        run = json.load(open(sys.argv[1], encoding="utf-8"))["runs"][0]
+        for r in run["results"]:
+            loc = (r.get("locations") or [{}])[0].get("physicalLocation", {})
+            where = loc.get("artifactLocation", {}).get("uri", "-") + ":" + str(loc.get("region", {}).get("startLine", ""))
+            print(clean.sub("?", f'{r["level"].upper():8} {r["ruleId"]} {where} {r["message"]["text"]}')[:400])
+        for n in (run.get("invocations") or [{}])[0].get("toolExecutionNotifications", []):
+            print("WARNING " + clean.sub("?", n["message"]["text"]))
+        print(len(run["results"]), "finding(s). The full report is in the SARIF file and in code scanning.")
+        PY
+        fi
     - if: inputs.upload-sarif == 'true' && steps.scan.outputs.exit-code != '2'
-      uses: github/codeql-action/upload-sarif@v3
+      uses: github/codeql-action/upload-sarif@v4
       with:
         sarif_file: ${{ inputs.sarif-file }}
         category: mcp-audit
-
     - if: steps.scan.outputs.exit-code != '0'
       shell: bash
       env:

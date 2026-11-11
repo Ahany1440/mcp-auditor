@@ -44,8 +44,9 @@ def load(path: str) -> dict[str, dict]:
     return json.loads(Path(path).read_text(encoding="utf-8"))["tools"]
 
 
-def compare(old: dict[str, dict], tools: list[Tool], since: str) -> list[Finding]:
-    """Findings for tools added, changed or removed relative to `old`. `since` finishes the sentence."""
+def compare(old: dict[str, dict], tools: list[Tool], since: str, pin_file: str | None = None) -> list[Finding]:
+    """Findings for tools added, changed or removed relative to `old`. `since` finishes the sentence.
+    A removed tool has no source line left, so its finding points at `pin_file` (the lock file that still lists it)."""
     new = snapshot(tools)
     by_key = dict(zip(new, tools))
     sources = {k.split(":", 1)[0] for k in new}
@@ -63,7 +64,8 @@ def compare(old: dict[str, dict], tools: list[Tool], since: str) -> list[Finding
         # only report removals for the kind of scan that ran this time (static vs live)
         if key not in new and (not new or key.split(":", 1)[0] in sources):
             name = key.split(":", 1)[1]
-            findings.append(Finding(RULE, "low", f"Tool '{name}' was removed {since}.", tool=name))
+            findings.append(Finding(RULE, "low", f"Tool '{name}' was removed {since}.",
+                                    pin_file, 1 if pin_file else None, name))
     return findings
 
 

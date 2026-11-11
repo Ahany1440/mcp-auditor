@@ -91,7 +91,8 @@ def main(argv: list[str] | None = None) -> int:
                     target.tools += [t for k, t in zip(pin.snapshot(later), later) if first.get(k) != pin.definition(t)]
                     break
         if args.pin and Path(args.pin).exists():
-            extra += pin.compare(pin.load(args.pin), target.tools, f"since it was pinned in {args.pin}")
+            extra += pin.compare(pin.load(args.pin), target.tools, f"since it was pinned in {args.pin}",
+                                 _pin_location(args.pin, root, is_url))
         elif args.pin:
             pin.save(args.pin, target.tools)
             print(f"mcp-audit: pinned {len(target.tools)} tools to {args.pin}. Future runs with --pin "
@@ -131,6 +132,16 @@ def main(argv: list[str] | None = None) -> int:
     if args.fail_on != "none" and any(severity_rank(f.severity) >= severity_rank(args.fail_on) for f in findings):
         return 1
     return 0
+
+
+def _pin_location(pin_file: str, root: Path | None, is_url: bool) -> str:
+    """The pin file as a path relative to the scanned folder, like every other finding path (SARIF adds the prefix)."""
+    if root is not None and not is_url:
+        try:
+            return Path(os.path.relpath(Path(pin_file).resolve(), Path(root).resolve())).as_posix()
+        except ValueError:  # different drive on Windows
+            pass
+    return Path(pin_file).as_posix()
 
 
 def _start_watchdog(seconds: float, workdir: str | None = None) -> threading.Timer:
