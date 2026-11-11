@@ -148,6 +148,15 @@ def detect(target: Target) -> list[Finding]:
                                         f"Tool '{tool.name}' description tells the model to use another tool ('{other}')"
                                         + ("; check the instruction is intended." if pushy else "."),
                                         tool.file, tool.line, tool.name, m.group(0).strip()))
+    # A Python file that does not parse gives no tools, but its text can still hold instructions for the model.
+    unparsed = {s["path"] for s in target.skipped if s["reason"].startswith(("syntax error", "could not be parsed"))}
+    for f in target.files:
+        for sev, why, evidence in check_text(f.text) if f.path in unparsed else []:
+            if "invisible" in why or "base64" in why or why.startswith("is unusually long"):
+                continue  # those are about a tool's description, and bidi/tag characters are reported per line below
+            at = f.text.find(evidence)
+            findings.append(Finding(RULE, sev, f"File has a syntax error, so its tools could not be read; its text {why}.",
+                                    f.path, f.line_of(at) if at >= 0 else None, evidence=evidence.strip()[:200]))
     # Bidi controls and tag characters anywhere in source can hide code from review ("Trojan Source",
     # CVE-2021-42574). Zero-width joiners, LRM/RLM and BOMs are normal in emoji and RTL text, so skip them here.
     for f in target.files:
